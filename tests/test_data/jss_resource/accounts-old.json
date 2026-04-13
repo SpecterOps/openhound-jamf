@@ -1,0 +1,18 @@
+{
+  "users": {
+    "user": [
+      {
+        "id": 1,
+        "name": "Steve Jobs"
+      }
+    ]
+  },
+  "groups": {
+    "group": [
+      {
+        "id": 1,
+        "name": "Information Technology"
+      }
+    ]
+  }
+}

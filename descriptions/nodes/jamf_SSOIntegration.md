@@ -1,0 +1,5 @@
+## Description
+
+Represents the Single Sign-On (SSO) integration configured in the Jamf Pro tenant. When enabled, the SSO provider can
+map attributes to authenticate as any Jamf account or group, making it a Tier 0 node with significant security
+implications.

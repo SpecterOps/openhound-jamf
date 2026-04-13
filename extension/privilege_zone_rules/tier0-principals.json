@@ -1,0 +1,8 @@
+{
+  "name": "Jamf: Tier Zero Principals",
+  "zone": "Tier Zero",
+  "description": "Accounts and group principals with 'Full Access' administrator privileges in the tenant and 'SSO' configuration if enabled.",
+  "cypher": "MATCH (n)\nWHERE n.tier = 0\nRETURN n",
+  "enabled": true,
+  "allow_disable": true
+}

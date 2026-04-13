@@ -1,0 +1,14 @@
+COMPUTER = "jamf_Computer"
+USER = "jamf_ComputerUser"  # May need to make this more generic for iOS/tvOS devices in the future
+POLICY = "jamf_Policy"  # Not an explicit node in collection data
+SCRIPT = "jamf_Script"  # Not an explicit node in collection data
+GROUP = "jamf_Group"
+ACCOUNT = "jamf_Account"
+DISABLED_ACCOUNT = "jamf_DisabledAccount"
+API_CLIENT = "jamf_ApiClient"
+DISABLED_API_CLIENT = "jamf_DisabledApiClient"
+# COMPUTER_USER = "jamf_ComputerUser"
+SITE = "jamf_Site"
+TENANT = "jamf_Tenant"
+API_ROLE = "jamf_ApiRole"  # Not an explicit node in collection data
+SSO_INTEGRATION = "jamf_SSOIntegration"

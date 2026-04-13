@@ -1,0 +1,12 @@
+{
+  "totalCount": 1,
+  "results": [
+    {
+      "id": "1",
+      "displayName": "One Role to Rule them all",
+      "privileges": [
+        "View License Serial Numbers"
+      ]
+    }
+  ]
+}

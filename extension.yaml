@@ -1,0 +1,31 @@
+name: jamf
+version: 0.1.0
+description: "JAMF resource collector for OpenGraph"
+authors:
+  - name: Lance Cain
+    email: lcain@specterops.io
+  - name: Joey Dreijer
+    email: jdreijer@specterops.io
+
+type: local
+license: APACHE-2.0
+homepage: https://github.com/specterops/openhound-jamf
+references:
+  - name: OpenHound
+    url: https://github.com/specterops/openhound
+
+credentials:
+  - name: username
+    description: The username to authenticate to the Jamf API
+    required: true
+  - name: password
+    description: The password to authenticate to the Jamf API
+    required: true
+
+parameters:
+  - name: size
+    description: The amount of assets to generate
+    required: false
+    default: 10000
+
+tags: [ "jamf", "source", "opengraph" ]

@@ -1,0 +1,62 @@
+{
+  "user": {
+    "id": 1,
+    "name": "AHarrison",
+    "full_name": "Ashley Harrison",
+    "email": "aharrison@company.com",
+    "email_address": "aharrison@company.com",
+    "phone_number": "123-555-6789",
+    "position": "Teachers",
+    "enable_custom_photo_url": true,
+    "custom_photo_url": "string",
+    "ldap_server": {
+      "id": -1,
+      "name": "None"
+    },
+    "extension_attributes": [
+      {
+        "extension_attribute": {
+          "id": 1,
+          "name": "Teacher ID",
+          "type": "String",
+          "value": "K12"
+        }
+      }
+    ],
+    "sites": [
+      {
+        "site": {
+          "id": -1,
+          "name": "None"
+        }
+      }
+    ],
+    "links": {
+      "computers": {
+        "computer": {
+          "id": 1,
+          "name": "string"
+        }
+      },
+      "peripherals": {
+        "peripheral": {
+          "id": 1,
+          "name": "string"
+        }
+      },
+      "mobile_devices": {
+        "mobile_device": {
+          "id": 1,
+          "name": "string"
+        }
+      },
+      "vpp_assignments": {
+        "vpp_assignment": {
+          "id": 1,
+          "name": "string"
+        }
+      },
+      "total_vpp_code_count": 0
+    }
+  }
+}

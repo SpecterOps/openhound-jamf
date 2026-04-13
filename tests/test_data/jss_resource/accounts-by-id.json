@@ -1,0 +1,57 @@
+{
+  "id": 1,
+  "name": "John Smith",
+  "directory_user": true,
+  "full_name": "John Smith",
+  "email": "john.smith@company.com",
+  "email_address": "john.smith@company.com",
+  "enabled": "Enabled",
+  "ldap_server": {
+    "id": 1,
+    "name": "Directory Server Name"
+  },
+  "force_password_change": true,
+  "access_level": "Full Access",
+  "privilege_set": "Administrator",
+  "site": {
+    "id": -1,
+    "name": "None"
+  },
+  "privileges": {
+    "jss_objects": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "jss_settings": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "jss_actions": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "recon": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "casper_admin": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "casper_remote": [
+      {
+        "privilege": "string"
+      }
+    ],
+    "casper_imaging": [
+      {
+        "privilege": "string"
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "accounts": {
+    "users": [
+      {
+        "id": 1,
+        "name": "Steve Jobs"
+      }
+    ],
+    "groups": [
+      {
+        "id": 1,
+        "name": "Information Technology"
+      }
+    ]
+  }
+}

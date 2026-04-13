@@ -1,0 +1,29 @@
+{
+  "group": {
+    "id": 1,
+    "name": "Administrators",
+    "access_level": "Full Access",
+    "privilege_set": "Administrator",
+    "site": {
+      "id": 1,
+      "name": "Minneapolis"
+    },
+    "privileges": {
+      "jss_objects": [
+        "action1"
+      ],
+      "jss_settings": [
+        "action1"
+      ],
+      "jss_actions": [
+        "action1"
+      ]
+    },
+    "members": [
+      {
+        "id": 1,
+        "name": "Steve Jobs"
+      }
+    ]
+  }
+}

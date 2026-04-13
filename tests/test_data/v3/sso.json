@@ -1,0 +1,38 @@
+{
+  "configurationType": "SAML",
+  "oidcSettings": {
+    "userMapping": "USERNAME",
+    "jamfIdAuthenticationEnabled": true,
+    "usernameAttributeClaimMapping": "EMAIL"
+  },
+  "samlSettings": {
+    "tokenExpirationDisabled": false,
+    "userAttributeEnabled": false,
+    "userAttributeName": " ",
+    "userMapping": "USERNAME",
+    "groupAttributeName": "http://schemas.xmlsoap.org/claims/Group",
+    "groupRdnKey": " ",
+    "idpProviderType": "ADFS",
+    "idpUrl": "https://example.idp.com/app/id/sso/saml/metadata",
+    "entityId": "saml/metadata",
+    "metadataFileName": "if MetadataSource is set to URL, remove this field",
+    "otherProviderTypeName": " ",
+    "federationMetadataFile": "WlhoaGJYQnNaU0J2WmlCaElHSmhjMlUyTkNCbGJtTnZaR1ZrSUhaaGJHbGtJSEF4TWk0Z2EyVjVjM1J2Y21VZ1ptbHNaUT09",
+    "metadataSource": "URL",
+    "sessionTimeout": 480
+  },
+  "ssoForEnrollmentEnabled": false,
+  "ssoBypassAllowed": false,
+  "ssoEnabled": false,
+  "ssoForMacOsSelfServiceEnabled": false,
+  "enrollmentSsoForAccountDrivenEnrollmentEnabled": false,
+  "enrollmentSsoConfig": {
+    "hosts": [
+      "dev-12324233.okta.com",
+      "example.okta.com"
+    ],
+    "managementHint": ""
+  },
+  "groupEnrollmentAccessEnabled": false,
+  "groupEnrollmentAccessName": " "
+}

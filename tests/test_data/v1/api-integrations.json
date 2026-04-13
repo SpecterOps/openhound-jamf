@@ -1,0 +1,17 @@
+{
+  "totalCount": 1,
+  "results": [
+    {
+      "id": 1,
+      "authorizationScopes": [
+        "Tootsie Roal",
+        "Jamf Reset"
+      ],
+      "displayName": "My API Integration",
+      "enabled": true,
+      "accessTokenLifetimeSeconds": 300,
+      "appType": "CLIENT_CREDENTIALS",
+      "clientId": "538878d4-9744-43ed-8732-3df99d502bd6"
+    }
+  ]
+}
