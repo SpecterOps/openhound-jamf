@@ -1,0 +1,3 @@
+[submodule "docs/og-docs-automation"]
+	path = docs/og-docs-automation
+	url = git@github.com:SpecterOps/og-docs-automation.git

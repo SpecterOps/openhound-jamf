@@ -1,0 +1,59 @@
+{
+  "group": "Jamf",
+  "pages": [
+    "opengraph/extensions/jamf/privilege-zone-rules",
+    "opengraph/extensions/jamf/queries",
+    "opengraph/extensions/jamf/schema",
+    {
+      "group": "Nodes",
+      "pages": [
+        "opengraph/extensions/jamf/nodes/jamf_account",
+        "opengraph/extensions/jamf/nodes/jamf_apiclient",
+        "opengraph/extensions/jamf/nodes/jamf_computer",
+        "opengraph/extensions/jamf/nodes/jamf_computeruser",
+        "opengraph/extensions/jamf/nodes/jamf_disabledaccount",
+        "opengraph/extensions/jamf/nodes/jamf_disabledapiclient",
+        "opengraph/extensions/jamf/nodes/jamf_group",
+        "opengraph/extensions/jamf/nodes/jamf_site",
+        "opengraph/extensions/jamf/nodes/jamf_ssointegration",
+        "opengraph/extensions/jamf/nodes/jamf_tenant"
+      ]
+    },
+    {
+      "group": "Edges",
+      "pages": [
+        "opengraph/extensions/jamf/edges/jamf_adminto",
+        "opengraph/extensions/jamf/edges/jamf_admintosite",
+        "opengraph/extensions/jamf/edges/jamf_assigneduser",
+        "opengraph/extensions/jamf/edges/jamf_azmatchedemail",
+        "opengraph/extensions/jamf/edges/jamf_contains",
+        "opengraph/extensions/jamf/edges/jamf_create_api_client_and_assign_role",
+        "opengraph/extensions/jamf/edges/jamf_create_api_client_and_create_role",
+        "opengraph/extensions/jamf/edges/jamf_create_api_client_and_update_role",
+        "opengraph/extensions/jamf/edges/jamf_createaccounts",
+        "opengraph/extensions/jamf/edges/jamf_createapiroles",
+        "opengraph/extensions/jamf/edges/jamf_createcomputerextensions",
+        "opengraph/extensions/jamf/edges/jamf_createpolicies",
+        "opengraph/extensions/jamf/edges/jamf_matchedemail",
+        "opengraph/extensions/jamf/edges/jamf_matchedname",
+        "opengraph/extensions/jamf/edges/jamf_memberof",
+        "opengraph/extensions/jamf/edges/jamf_okta_same_device",
+        "opengraph/extensions/jamf/edges/jamf_scriptsnontraversable",
+        "opengraph/extensions/jamf/edges/jamf_sso_login",
+        "opengraph/extensions/jamf/edges/jamf_update_api_client_and_assign_role",
+        "opengraph/extensions/jamf/edges/jamf_update_api_client_and_create_roles",
+        "opengraph/extensions/jamf/edges/jamf_update_api_client_and_update_roles",
+        "opengraph/extensions/jamf/edges/jamf_update_recurring_scripts",
+        "opengraph/extensions/jamf/edges/jamf_update_roles_assigned_to_self",
+        "opengraph/extensions/jamf/edges/jamf_update_self_and_assign_roles",
+        "opengraph/extensions/jamf/edges/jamf_update_self_and_create_roles",
+        "opengraph/extensions/jamf/edges/jamf_update_self_and_update_roles",
+        "opengraph/extensions/jamf/edges/jamf_update_sso_settings",
+        "opengraph/extensions/jamf/edges/jamf_updateaccounts",
+        "opengraph/extensions/jamf/edges/jamf_updateapiroles",
+        "opengraph/extensions/jamf/edges/jamf_updatecomputerextensions",
+        "opengraph/extensions/jamf/edges/jamf_updatepolicies"
+      ]
+    }
+  ]
+}

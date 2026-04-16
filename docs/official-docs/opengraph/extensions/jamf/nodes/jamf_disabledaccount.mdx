@@ -1,0 +1,15 @@
+---
+title: 'jamf_DisabledAccount'
+description: 'Represents a disabled Jamf Pro account. Disabled accounts retain their permission configuration but cannot actively authenticate. If re-enabled, they regain all assigned privileges.'
+icon: '/images/extensions/jamf/jamf_disabledaccount.png'
+---
+
+<img noZoom src="/assets/enterprise-AND-community-edition-pill-tag.svg" alt="Applies to BloodHound Enterprise and CE"/>
+
+## Description
+
+Represents a disabled Jamf Pro account. Disabled accounts retain their permission configuration but cannot actively
+authenticate. If re-enabled, they regain all assigned privileges.
+
+> This node shares its property set with [jamf_Account](/opengraph/extensions/jamf/nodes/jamf_account). The difference is that the account's `enabled`
+> property is set to "Disabled".
