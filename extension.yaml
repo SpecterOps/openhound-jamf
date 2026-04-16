@@ -1,6 +1,6 @@
 name: jamf
 version: 0.1.0
-description: "JAMF resource collector for OpenGraph"
+description: "Jamf resource collector for OpenGraph"
 authors:
   - name: Lance Cain
     email: lcain@specterops.io
