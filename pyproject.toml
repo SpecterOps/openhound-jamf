@@ -1,7 +1,7 @@
 [project]
 name = "openhound-jamf"
 dynamic = ["version"]
-description = "OpenGraph collector for JAMF using OpenHound"
+description = "OpenGraph collector for Jamf using OpenHound"
 readme = "README.md"
 requires-python = ">=3.13"
 authors = [

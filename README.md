@@ -30,7 +30,7 @@ OpenHound is a standardized framework for building and running OpenGraph collect
 Python and powered by the [Data Load Tool (DLT)](https://dlthub.com/docs/intro) library, giving you a consistent
 workflow to collect, process, and convert data from any source into BloodHound-compatible graphs.
 
-The openhound-jamf extension collects JAMF Pro resources and transforms these into usable nodes and edges for
+The openhound-jamf extension collects Jamf Pro resources and transforms these into usable nodes and edges for
 BloodHound.
 
 [![Python Version](https://img.shields.io/badge/Python-3.13-brightgreen.svg)](#about)
