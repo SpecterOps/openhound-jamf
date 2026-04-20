@@ -10,6 +10,7 @@ logs
 dbt_packages
 .vscode
 .codex
+docs/official-docs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
