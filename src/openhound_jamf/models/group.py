@@ -224,12 +224,15 @@ class Group(JAMFAsset):
 
     @property
     def as_node(self):
+        tier_eval = (
+            self.privilege_set == "Administrator" and self.access_level == "Full Access"
+        )
         properties = GroupProperties(
             id=self.id,
             name=self.name,
             displayname=self.name,
             tenant=self.tenant_id,
-            tier=1,
+            tier=0 if tier_eval else 1,
             site_id=str(self.site.id) if self.site else "-1",
             access_level=self.access_level,
             privilege_objects=self.privileges.jss_objects if self.privileges else [],

@@ -239,12 +239,16 @@ class Account(JAMFAsset):
 
     @property
     def as_node(self):
+
+        tier_eval = (
+            self.privilege_set == "Administrator" and self.access_level == "Full Access"
+        )
         properties = AccountProperties(
             name=self.name,
             displayname=self.name,
             id=self.id,
             tenant=self.tenant_id,
-            tier=1,
+            tier=0 if tier_eval else 1,
             full_name=self.full_name,
             email=self.email,
             enabled=self.enabled == "Enabled",
