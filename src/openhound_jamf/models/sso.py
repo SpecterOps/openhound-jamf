@@ -105,7 +105,7 @@ class SSO(JAMFAsset):
             tenant=self.tenant_id,
             type=self.configuration_type,
             bypass_allowed=self.sso_for_enrollment_enabled,
-            tier=1,
+            tier=0,
             sso_enabled=self.sso_enabled,
             environmentid=self.tenant_node_id,
         )
