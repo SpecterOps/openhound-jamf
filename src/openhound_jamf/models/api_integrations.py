@@ -189,7 +189,7 @@ class ApiIntegration(JAMFAsset):
             displayname=self.display_name,
             id=self.id,
             tenant=self.tenant_id,
-            tier=0,
+            tier=1,
             enabled=self.enabled,
             client_id=self.client_id,
             privileges=all_privileges,
