@@ -181,8 +181,8 @@ class ApiIntegration(JAMFAsset):
     def as_node(self) -> JAMFNode:
 
         all_privileges = []
-        for (role_name,) in self._lookup.client_permissions(self.id):
-            all_privileges.append(role_name)
+        for (privilege,) in self._lookup.client_permissions(self.id):
+            all_privileges.append(privilege)
 
         properties = ApiIntegrationProperties(
             name=self.display_name,

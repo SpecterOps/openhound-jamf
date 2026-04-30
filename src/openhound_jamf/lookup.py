@@ -30,11 +30,11 @@ class JamfLookup(LookupManager):
 
     @lru_cache
     def client_permissions(self, client_id: int):
-        return self._find_single_object(
+        return self._find_all_objects(
             f"""
-            SELECT role_name FROM {self.schema}.api_client_resolved_privileges
+            SELECT privilege FROM {self.schema}.api_client_resolved_privileges
             WHERE client_id = ?
-        """,
+            """,
             [client_id],
         )
 
