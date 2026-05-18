@@ -49,13 +49,13 @@ class AccountProperties(JAMFNodeProperties):
 
 
 class BaseAccount(BaseModel):
-    name: str
+    name: str | None = None
     id: int
 
 
 class Site(BaseModel):
     id: int
-    name: str
+    name: str | None = None
 
 
 class Privilege(BaseModel):
@@ -228,9 +228,9 @@ class Account(JAMFAsset):
     name: str
     full_name: str
     email: str
-    email_address: str
+    email_address: str | None = None
     enabled: str
-    force_password_change: bool
+    force_password_change: bool | None = None
     access_level: str
     privilege_set: str
     site: Optional[Site] | None = None
@@ -297,12 +297,13 @@ class Account(JAMFAsset):
 
     @property
     def _az_matched_email_edges(self):
-        match_by = PropertyMatch(key="email", value=self.email_address)
-        yield Edge(
-            kind=ek.AZ_MATCHED_EMAIL,
-            start=EdgePath(match_by="id", value=self._node_id),
-            end=ConditionalEdgePath(kind="AZUser", property_matchers=[match_by]),
-        )
+        if self.email_address:
+            match_by = PropertyMatch(key="email", value=self.email_address)
+            yield Edge(
+                kind=ek.AZ_MATCHED_EMAIL,
+                start=EdgePath(match_by="id", value=self._node_id),
+                end=ConditionalEdgePath(kind="AZUser", property_matchers=[match_by]),
+            )
 
     @property
     def _admin_to_site_edges(self):

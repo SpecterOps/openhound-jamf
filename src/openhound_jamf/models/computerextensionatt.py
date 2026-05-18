@@ -3,5 +3,5 @@ from pydantic import BaseModel
 
 class ComputerextensionAttribute(BaseModel):
     id: int
-    name: str
-    enabled: bool
+    name: str | None = None
+    enabled: bool | None = None

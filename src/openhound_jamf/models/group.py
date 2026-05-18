@@ -12,12 +12,12 @@ from openhound_jamf.main import app
 
 class User(BaseModel):
     id: int
-    name: str
+    name: str | None = None
 
 
 class Site(BaseModel):
     id: int
-    name: str
+    name: str | None = None
 
 
 @dataclass
@@ -36,7 +36,7 @@ class GroupProperties(JAMFNodeProperties):
 
 
 class BaseGroup(BaseModel):
-    name: str
+    name: str | None = None
     id: int
 
 
@@ -218,9 +218,7 @@ class Group(JAMFAsset):
     privilege_set: str
     site: Site
     privileges: Privilege | None = None
-    members: list[User]
-    site: Site
-    members: list[User]
+    members: list[User] = Field(default_factory=list)
 
     @property
     def as_node(self):
