@@ -15,18 +15,18 @@ from openhound_jamf.main import app
 class ComputerProperties(JAMFNodeProperties):
     """JAMF Computer node properties"""
 
-    managed: bool
-    supervised: bool
-    enrolled_via_dep: bool
-    user_approved_mdm: bool
     site_id: str
     site_name: str
-    jamf_version: str
-    ip_address: str
-    last_reported_ip_v4: str
-    last_reported_ip_v6: str
     udid: str
     computer_group_memberships: list[str]
+    managed: bool | None = None
+    supervised: bool | None = None
+    enrolled_via_dep: bool | None = None
+    user_approved_mdm: bool | None = None
+    jamf_version: str | None = None
+    ip_address: str | None = None
+    last_reported_ip_v4: str | None = None
+    last_reported_ip_v6: str | None = None
     model: str | None = None
     mac_address: str | None = None
     make: str | None = None
@@ -55,7 +55,7 @@ class ComputerProperties(JAMFNodeProperties):
 
 
 class RemoteManagement(BaseModel):
-    managed: bool
+    managed: bool | None = None
     management_username: str | None = Field(default=None, alias="managementUsername")
 
 
@@ -175,16 +175,18 @@ class Computer(JAMFAsset):
         default_factory=list, alias="extensionAttributes"
     )
     name: str
-    last_ip_address: str = Field(alias="lastIpAddress")
-    last_reported_ip_v4: str = Field(alias="lastReportedIpV4")
-    last_reported_ip_v6: str = Field(alias="lastReportedIpV6")
-    jamf_binary_version: str = Field(alias="jamfBinaryVersion")
+    last_ip_address: str | None = Field(default=None, alias="lastIpAddress")
+    last_reported_ip_v4: str | None = Field(default=None, alias="lastReportedIpV4")
+    last_reported_ip_v6: str | None = Field(default=None, alias="lastReportedIpV6")
+    jamf_binary_version: str | None = Field(default=None, alias="jamfBinaryVersion")
     platform: str | None = None
     barcode1: str | None = None
     barcode2: str | None = None
     asset_tag: str | None = Field(default=None, alias="assetTag")
-    remote_management: RemoteManagement = Field(alias="remoteManagement")
-    supervised: bool
+    remote_management: RemoteManagement | None = Field(
+        default=None, alias="remoteManagement"
+    )
+    supervised: bool | None = None
     mdm_capable: MdmCapable | None = Field(default=None, alias="mdmCapable")
     report_date: str | None = Field(default=None, alias="reportDate")
     last_contact_time: str | None = Field(default=None, alias="lastContactTime")
@@ -200,10 +202,10 @@ class Computer(JAMFAsset):
     itunes_store_account_active: bool | None = Field(
         default=None, alias="itunesStoreAccountActive"
     )
-    enrolled_via_automated_device_enrollment: bool = Field(
-        alias="enrolledViaAutomatedDeviceEnrollment"
+    enrolled_via_automated_device_enrollment: bool | None = Field(
+        default=None, alias="enrolledViaAutomatedDeviceEnrollment"
     )
-    user_approved_mdm: bool = Field(alias="userApprovedMdm")
+    user_approved_mdm: bool | None = Field(default=None, alias="userApprovedMdm")
     enrollment_method: EnrollmentMethod | None = Field(
         default=None, alias="enrollmentMethod"
     )
@@ -223,7 +225,6 @@ class Computer(JAMFAsset):
     last_logged_in_username_binary_timestamp: str | None = Field(
         default=None, alias="lastLoggedInUsernameBinaryTimestamp"
     )
-    # last_reported_ip: str = Field(alias="lastReportedIp")
     site: Site
     user_and_location: UserAndLocation | None = Field(
         default=None, alias="userAndLocation"
@@ -246,7 +247,7 @@ class Computer(JAMFAsset):
             id=self.id,
             tenant=self.tenant_id,
             tier=1,
-            managed=self.remote_management.managed,
+            managed=self.remote_management.managed if self.remote_management else None,
             jamf_version=self.jamf_binary_version,
             supervised=self.supervised,
             enrolled_via_dep=self.enrolled_via_automated_device_enrollment,
