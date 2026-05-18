@@ -242,7 +242,7 @@ class Policy(BaseAsset):
     self_service: SelfService | None = None
     package_configuration: PackageConfiguration | None = None
     scripts: list[Script]
-    printers: list[str] = Field(default_factory=list)
+    printers: list | None = Field(default_factory=list)
     dock_items: list[dict[str, Any]] = Field(default_factory=list)
     account_maintenance: AccountMaintenance | None = None
     reboot: Reboot | None = None
