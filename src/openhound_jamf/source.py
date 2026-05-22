@@ -69,6 +69,61 @@ class CustomAuth(AuthConfigBase):
         return request
 
 
+@configspec
+class ApiClientAuth(AuthConfigBase):
+    def __init__(self, host: str, client_id: str, client_secret: str):
+        self.host = host
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+    @staticmethod
+    @cache
+    def token(host, client_id, client_secret) -> str:
+        """Calls the Jamf OAuth endpoint to generate an API token for an API Client."""
+        response = requests.post(
+            f"{host}/api/v1/oauth/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+        )
+        return response.json()["access_token"]
+
+    def __call__(self, request):
+        request.headers["Authorization"] = (
+            f"Bearer {self.token(self.host, self.client_id, self.client_secret)}"
+        )
+        return request
+
+
+def build_auth(
+    *,
+    host: str,
+    username: str | None,
+    password: str | None,
+    client_id: str | None,
+    client_secret: str | None,
+) -> AuthConfigBase:
+    if client_id or client_secret:
+        if not client_id or not client_secret:
+            raise ValueError(
+                "Both client_id and client_secret are required for API Client authentication"
+            )
+        return ApiClientAuth(
+            host=host,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+    if not username or not password:
+        raise ValueError(
+            "Provide either username/password or client_id/client_secret for Jamf authentication"
+        )
+
+    return CustomAuth(host=host, username=username, password=password)
+
+
 @app.resource(name="users", parallelized=True, columns=BaseUser)
 def users(ctx: SourceContext):
     """DLT resource, fetches JAMF users via the /JSSResource/use¬rs endpoint.
@@ -76,7 +131,9 @@ def users(ctx: SourceContext):
     Yields:
         dict: The JAMF user with user ID, excluding user details.
     """
-    response = ctx.client.get("/JSSResource/users").json()
+    response = ctx.client.get("/JSSResource/users")
+    response.raise_for_status()
+    response = response.json()
     for user in response["users"]:
         yield user
 
@@ -90,7 +147,9 @@ def user_details(user, ctx: SourceContext):
     Yields:
         user (User): The JAMF user including user details, parsed by the Pydantic User model.
     """
-    response = ctx.client.get(f"/JSSResource/users/id/{user['id']}").json()
+    response = ctx.client.get(f"/JSSResource/users/id/{user['id']}")
+    response.raise_for_status()
+    response = response.json()
     yield response["user"]
 
 
@@ -101,7 +160,9 @@ def accounts(ctx: SourceContext):
     Yields:
         dict: The JAMF account with account ID, excluding account details.
     """
-    response = ctx.client.get("/JSSResource/accounts").json()
+    response = ctx.client.get("/JSSResource/accounts")
+    response.raise_for_status()
+    response = response.json()
     for account in response["accounts"]["users"]:
         yield account
 
@@ -118,7 +179,9 @@ def account_details(user, ctx: SourceContext):
     Yields:
         account (Account): The JAMF account including account details, parsed by the Pydantic Account model.
     """
-    response = ctx.client.get(f"/JSSResource/accounts/userid/{user['id']}").json()
+    response = ctx.client.get(f"/JSSResource/accounts/userid/{user['id']}")
+    response.raise_for_status()
+    response = response.json()
     yield response["account"]
 
 
@@ -129,7 +192,9 @@ def account_groups(ctx: SourceContext):
     Yields:
         dict: The JAMF account group with group ID, excluding group details.
     """
-    response = ctx.client.get("/JSSResource/accounts").json()
+    response = ctx.client.get("/JSSResource/accounts")
+    response.raise_for_status()
+    response = response.json()
     for account in response["accounts"]["groups"]:
         yield account
 
@@ -149,7 +214,9 @@ def account_group_details(group, ctx: SourceContext):
     Yields:
         group (Group): The JAMF account group including group details, parsed by the Pydantic Group model.
     """
-    response = ctx.client.get(f"/JSSResource/accounts/groupid/{group['id']}").json()
+    response = ctx.client.get(f"/JSSResource/accounts/groupid/{group['id']}")
+    response.raise_for_status()
+    response = response.json()
     yield response["group"]
 
 
@@ -160,7 +227,9 @@ def policies(ctx: SourceContext):
     Yields:
         dict: The JAMF policy with policy ID, excluding policy details.
     """
-    response = ctx.client.get("/JSSResource/policies").json()
+    response = ctx.client.get("/JSSResource/policies")
+    response.raise_for_status()
+    response = response.json()
     for policy in response["policies"]:
         yield policy
 
@@ -177,7 +246,9 @@ def policy_details(policy, ctx: SourceContext):
     Yields:
         policy (Policy): The JAMF policy including policy details, parsed by the Pydantic Policy model.
     """
-    response = ctx.client.get(f"/JSSResource/policies/id/{policy['id']}").json()
+    response = ctx.client.get(f"/JSSResource/policies/id/{policy['id']}")
+    response.raise_for_status()
+    response = response.json()
     policy = response["policy"]
     general = policy.pop("general")
     yield {**general, **policy}
@@ -190,7 +261,9 @@ def scripts(ctx: SourceContext):
     Yields:
         dict: The JAMF script with script ID, excluding script details.
     """
-    response = ctx.client.get("/JSSResource/scripts").json()
+    response = ctx.client.get("/JSSResource/scripts")
+    response.raise_for_status()
+    response = response.json()
     for script in response["scripts"]:
         yield script
 
@@ -207,7 +280,9 @@ def script_details(script, ctx: SourceContext):
     Yields:
         script (Script): The JAMF script including script details, parsed by the Pydantic Script model.
     """
-    response = ctx.client.get(f"/JSSResource/scripts/id/{script['id']}").json()
+    response = ctx.client.get(f"/JSSResource/scripts/id/{script['id']}")
+    response.raise_for_status()
+    response = response.json()
     yield response["script"]
 
 
@@ -222,7 +297,9 @@ def computerextensionattributes(ctx: SourceContext):
     Yields:
         dict: The JAMF computer extension attribute definition.
     """
-    response = ctx.client.get("/JSSResource/computerextensionattributes").json()
+    response = ctx.client.get("/JSSResource/computerextensionattributes")
+    response.raise_for_status()
+    response = response.json()
     for assoc in response["computer_extension_attributes"]:
         yield assoc
 
@@ -234,7 +311,9 @@ def sites(ctx: SourceContext):
     Yields:
         site (Site): The JAMF site, parsed by the Pydantic Site model.
     """
-    response = ctx.client.get("/JSSResource/sites").json()
+    response = ctx.client.get("/JSSResource/sites")
+    response.raise_for_status()
+    response = response.json()
     for site in response["sites"]:
         yield site
 
@@ -246,7 +325,9 @@ def sso(ctx: SourceContext):
     Yields:
         dict: The JAMF SSO settings.
     """
-    response = ctx.client.get("/api/v3/sso").json()
+    response = ctx.client.get("/api/v3/sso")
+    response.raise_for_status()
+    response = response.json()
     yield response
 
 
@@ -304,13 +385,19 @@ def tenant(host: str):
 
 @dlt.source(name="jamf", max_table_nesting=0)
 def source(
-    username=dlt.secrets.value, password=dlt.secrets.value, host=dlt.secrets.value
+    username: str | None = dlt.secrets.value,
+    password: str | None = dlt.secrets.value,
+    client_id: str | None = dlt.secrets.value,
+    client_secret: str | None = dlt.secrets.value,
+    host: str = dlt.secrets.value,
 ):
     """DLT source, defines JAMF collection resources and transformers.
 
     Args:
-        username (str): The JAMF username used for authentication.
-        password (str): The JAMF password used for authentication.
+        username (str | None): The JAMF username used for authentication.
+        password (str | None): The JAMF password used for authentication.
+        client_id (str | None): The Jamf API Client ID used for authentication.
+        client_secret (str | None): The Jamf API Client secret used for authentication.
         host (str): The base JAMF URL used for API calls.
 
     Returns:
@@ -322,7 +409,13 @@ def source(
         client=RESTClient(
             base_url=host,
             headers={"accept": "application/json"},
-            auth=CustomAuth(host=host, username=username, password=password),
+            auth=build_auth(
+                host=host,
+                username=username,
+                password=password,
+                client_id=client_id,
+                client_secret=client_secret,
+            ),
             paginator=SinglePagePaginator(),
         )
     )

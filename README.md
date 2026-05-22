@@ -40,3 +40,8 @@ BloodHound.
 Follow the OpenHound docs to get started:
 
 - [OpenHound Documentation](https://bloodhound.specterops.io/openhound/overview)
+
+The collector supports either of these Jamf authentication modes:
+
+- `username` + `password`
+- `client_id` + `client_secret`
