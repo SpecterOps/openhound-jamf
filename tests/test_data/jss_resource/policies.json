@@ -1,9 +1,8 @@
-[
-  {
-    "size": 1,
-    "policy": {
+{
+  "policies": [
+    {
       "id": 1,
       "name": "string"
     }
-  }
-]
+  ]
+}

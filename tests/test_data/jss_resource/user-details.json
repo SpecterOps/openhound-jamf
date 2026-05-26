@@ -15,47 +15,41 @@
     },
     "extension_attributes": [
       {
-        "extension_attribute": {
-          "id": 1,
-          "name": "Teacher ID",
-          "type": "String",
-          "value": "K12"
-        }
+        "id": 1,
+        "name": "Teacher ID"
       }
     ],
     "sites": [
       {
-        "site": {
-          "id": -1,
-          "name": "None"
-        }
+        "id": -1,
+        "name": "None"
       }
     ],
     "links": {
-      "computers": {
-        "computer": {
+      "computers": [
+        {
           "id": 1,
           "name": "string"
         }
-      },
-      "peripherals": {
-        "peripheral": {
+      ],
+      "peripherals": [
+        {
           "id": 1,
           "name": "string"
         }
-      },
-      "mobile_devices": {
-        "mobile_device": {
+      ],
+      "mobile_devices": [
+        {
           "id": 1,
           "name": "string"
         }
-      },
-      "vpp_assignments": {
-        "vpp_assignment": {
+      ],
+      "vpp_assignments": [
+        {
           "id": 1,
           "name": "string"
         }
-      },
+      ],
       "total_vpp_code_count": 0
     }
   }

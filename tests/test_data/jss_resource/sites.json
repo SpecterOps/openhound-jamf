@@ -1,9 +1,8 @@
-[
-  {
-    "size": 1,
-    "site": {
+{
+  "sites": [
+    {
       "id": 1,
       "name": "Minneapolis"
     }
-  }
-]
+  ]
+}
