@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any
 
 from openhound.core.asset import BaseAsset
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from openhound_jamf.main import app
 
@@ -15,7 +15,7 @@ class Priority(Enum):
 
 class BaseScript(BaseModel):
     id: int
-    name: str
+    name: str | None = None
 
 
 @app.asset(
@@ -33,14 +33,14 @@ class Script(BaseAsset):
 
     id: int
     name: str
-    category: str
-    filename: str
-    info: str
-    notes: str
-    priority: Priority
-    parameters: dict[str, Any]
-    os_requirements: str
-    script_contents_encoded: str
+    category: str | None = None
+    filename: str | None = None
+    info: str | None = None
+    notes: str | None = None
+    priority: Priority | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    os_requirements: str | None = None
+    script_contents_encoded: str | None = None
 
     @property
     def as_node(self):

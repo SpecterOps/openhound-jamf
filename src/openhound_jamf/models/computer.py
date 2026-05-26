@@ -15,18 +15,18 @@ from openhound_jamf.main import app
 class ComputerProperties(JAMFNodeProperties):
     """JAMF Computer node properties"""
 
-    managed: bool
-    supervised: bool
-    enrolled_via_dep: bool
-    user_approved_mdm: bool
     site_id: str
     site_name: str
-    jamf_version: str
-    ip_address: str
-    last_reported_ip_v4: str
-    last_reported_ip_v6: str
     udid: str
     computer_group_memberships: list[str]
+    managed: bool | None = None
+    supervised: bool | None = None
+    enrolled_via_dep: bool | None = None
+    user_approved_mdm: bool | None = None
+    jamf_version: str | None = None
+    ip_address: str | None = None
+    last_reported_ip_v4: str | None = None
+    last_reported_ip_v6: str | None = None
     model: str | None = None
     mac_address: str | None = None
     make: str | None = None
@@ -55,19 +55,21 @@ class ComputerProperties(JAMFNodeProperties):
 
 
 class RemoteManagement(BaseModel):
-    managed: bool
+    managed: bool | None = None
     management_username: str | None = Field(default=None, alias="managementUsername")
 
 
 class UserManagementInfo(BaseModel):
-    capable_user: str = Field(alias="capableUser")
-    management_id: str = Field(alias="managementId")
+    capable_user: str | None = Field(default=None, alias="capableUser")
+    management_id: str | None = Field(default=None, alias="managementId")
 
 
 class MdmCapable(BaseModel):
-    capable: bool
+    capable: bool | None = None
     # capable_users: list[str] = Field(alias="capableUsers") deprecated
-    user_management_info: list[UserManagementInfo] = Field(alias="userManagementInfo")
+    user_management_info: list[UserManagementInfo] = Field(
+        default_factory=list, alias="userManagementInfo"
+    )
 
 
 class Site(BaseModel):
@@ -76,9 +78,9 @@ class Site(BaseModel):
 
 
 class EnrollmentMethod(BaseModel):
-    id: str
+    id: str | None = None
     object_name: str | None = Field(alias="objectName", default=None)
-    object_type: str = Field(alias="objectType")
+    object_type: str | None = Field(default=None, alias="objectType")
 
 
 class UserAndLocation(BaseModel):
@@ -90,10 +92,10 @@ class UserAndLocation(BaseModel):
 
 
 class Hardware(BaseModel):
-    model: str
-    make: str
-    model_identifier: str = Field(alias="modelIdentifier")
-    mac_address: str = Field(alias="macAddress")
+    model: str | None = None
+    make: str | None = None
+    model_identifier: str | None = Field(default=None, alias="modelIdentifier")
+    mac_address: str | None = Field(default=None, alias="macAddress")
     serial_number: str | None = Field(default=None, alias="serialNumber")
     processor_type: str | None = Field(default=None, alias="processorType")
     apple_silicon: bool | None = Field(default=None, alias="appleSilicon")
@@ -125,7 +127,7 @@ class DiskEncryption(BaseModel):
 
 
 class GroupMembership(BaseModel):
-    group_id: str = Field(alias="groupId")
+    group_id: str | None = Field(default=None, alias="groupId")
     group_name: str = Field(alias="groupName")
 
 
@@ -169,42 +171,48 @@ class Computer(JAMFAsset):
 
     id: str
     udid: str
-    extension_attributes: list = Field(alias="extensionAttributes")
+    extension_attributes: list = Field(
+        default_factory=list, alias="extensionAttributes"
+    )
     name: str
-    last_ip_address: str = Field(alias="lastIpAddress")
-    last_reported_ip_v4: str = Field(alias="lastReportedIpV4")
-    last_reported_ip_v6: str = Field(alias="lastReportedIpV6")
-    jamf_binary_version: str = Field(alias="jamfBinaryVersion")
-    platform: str
+    last_ip_address: str | None = Field(default=None, alias="lastIpAddress")
+    last_reported_ip_v4: str | None = Field(default=None, alias="lastReportedIpV4")
+    last_reported_ip_v6: str | None = Field(default=None, alias="lastReportedIpV6")
+    jamf_binary_version: str | None = Field(default=None, alias="jamfBinaryVersion")
+    platform: str | None = None
     barcode1: str | None = None
     barcode2: str | None = None
     asset_tag: str | None = Field(default=None, alias="assetTag")
-    remote_management: RemoteManagement = Field(alias="remoteManagement")
-    supervised: bool
-    mdm_capable: MdmCapable = Field(alias="mdmCapable")
-    report_date: str = Field(alias="reportDate")
-    last_contact_time: str = Field(alias="lastContactTime")
+    remote_management: RemoteManagement | None = Field(
+        default=None, alias="remoteManagement"
+    )
+    supervised: bool | None = None
+    mdm_capable: MdmCapable | None = Field(default=None, alias="mdmCapable")
+    report_date: str | None = Field(default=None, alias="reportDate")
+    last_contact_time: str | None = Field(default=None, alias="lastContactTime")
     last_cloud_backup_date: str | None = Field(
         default=None, alias="lastCloudBackupDate"
     )
-    last_enrolled_date: str = Field(alias="lastEnrolledDate")
+    last_enrolled_date: str | None = Field(default=None, alias="lastEnrolledDate")
     mdm_profile_expiration: datetime | None = Field(
         default=None, alias="mdmProfileExpiration"
     )
-    initial_entry_date: str = Field(alias="initialEntryDate")
+    initial_entry_date: str | None = Field(default=None, alias="initialEntryDate")
     distribution_point: str | None = Field(default=None, alias="distributionPoint")
-    itunes_store_account_active: bool = Field(alias="itunesStoreAccountActive")
-    enrolled_via_automated_device_enrollment: bool = Field(
-        alias="enrolledViaAutomatedDeviceEnrollment"
+    itunes_store_account_active: bool | None = Field(
+        default=None, alias="itunesStoreAccountActive"
     )
-    user_approved_mdm: bool = Field(alias="userApprovedMdm")
+    enrolled_via_automated_device_enrollment: bool | None = Field(
+        default=None, alias="enrolledViaAutomatedDeviceEnrollment"
+    )
+    user_approved_mdm: bool | None = Field(default=None, alias="userApprovedMdm")
     enrollment_method: EnrollmentMethod | None = Field(
         default=None, alias="enrollmentMethod"
     )
-    declarative_device_management_enabled: bool = Field(
-        alias="declarativeDeviceManagementEnabled"
+    declarative_device_management_enabled: bool | None = Field(
+        default=None, alias="declarativeDeviceManagementEnabled"
     )
-    management_id: str = Field(alias="managementId")
+    management_id: str | None = Field(default=None, alias="managementId")
     last_logged_in_username_self_service: str | None = Field(
         default=None, alias="lastLoggedInUsernameSelfService"
     )
@@ -217,7 +225,6 @@ class Computer(JAMFAsset):
     last_logged_in_username_binary_timestamp: str | None = Field(
         default=None, alias="lastLoggedInUsernameBinaryTimestamp"
     )
-    # last_reported_ip: str = Field(alias="lastReportedIp")
     site: Site
     user_and_location: UserAndLocation | None = Field(
         default=None, alias="userAndLocation"
@@ -240,7 +247,7 @@ class Computer(JAMFAsset):
             id=self.id,
             tenant=self.tenant_id,
             tier=1,
-            managed=self.remote_management.managed,
+            managed=self.remote_management.managed if self.remote_management else None,
             jamf_version=self.jamf_binary_version,
             supervised=self.supervised,
             enrolled_via_dep=self.enrolled_via_automated_device_enrollment,
