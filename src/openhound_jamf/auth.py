@@ -66,7 +66,8 @@ class JamfAuth(AuthConfigBase):
     def get_token(self) -> str:
         if not self.token:
             with self._token_lock:
-                self.token = self.credentials.token
+                if not self.token:
+                    self.token = self.credentials.token
 
         return self.token
 
