@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from collections import Counter
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("mock_dlt_requests")
+
 EXPECTED_RESOURCES = [
     "account_details",
     "account_group_details",
@@ -18,9 +22,8 @@ EXPECTED_RESOURCES = [
 ]
 
 
-EXPECTED_CALLS = Counter(
+BASE_EXPECTED_CALLS = Counter(
     {
-        "auth_token": 1,
         "users": 1,
         "user_details": 1,
         "accounts": 2,
@@ -39,15 +42,8 @@ EXPECTED_CALLS = Counter(
     }
 )
 
-#
-# def _reload_source_module():
-#     for module_name in list(sys.modules):
-#         if module_name.startswith("openhound_jamf"):
-#             sys.modules.pop(module_name, None)
-#     return importlib.import_module("openhound_jamf.source")
 
-
-def test_collect_pipeline_runs_successfully(tmp_path, mock_dlt_requests, mock_jamf_api):
+def _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls):
     import os
 
     os.environ["DLT_DATA_DIR"] = str(tmp_path / "dlt")
@@ -57,17 +53,8 @@ def test_collect_pipeline_runs_successfully(tmp_path, mock_dlt_requests, mock_ja
 
     from openhound_jamf.source import source as source_module
 
-    # source_module = _reload_source_module()
-    # source_module.CustomAuth.token.cache_clear()
-
     collector = Collector(name="jamf", output_path=tmp_path / "output")
-    load_info = collector.run(
-        source_module(
-            username="jamf-user",
-            password="jamf-pass",
-            host="https://jamf.test",
-        )
-    )
+    load_info = collector.run(source_module(credentials=credentials))
 
     assert load_info.loads_ids
     assert not load_info.has_failed_jobs
@@ -78,4 +65,41 @@ def test_collect_pipeline_runs_successfully(tmp_path, mock_dlt_requests, mock_ja
         assert resource_dir.exists()
         assert any(resource_dir.glob("*.jsonl*"))
 
-    assert Counter(mock_jamf_api.app.state.calls) == EXPECTED_CALLS
+    actual_calls = Counter(mock_jamf_api.app.state.calls)
+    assert actual_calls == expected_calls, (
+        "Jamf API calls did not match expectations. "
+        f"actual={actual_calls}, expected={expected_calls}, "
+        f"call_order={mock_jamf_api.app.state.calls}"
+    )
+
+
+def test_collect_pipeline_runs_successfully(tmp_path, mock_jamf_api):
+    from openhound_jamf.auth import JamfPasswordCredentials
+
+    credentials = JamfPasswordCredentials(
+        host="https://jamf.test",
+        username="jamf-user",
+        password="jamf-pass",
+    )
+    assert credentials.auth == "password"
+
+    expected_calls = BASE_EXPECTED_CALLS + Counter({"auth_token": 1})
+
+    _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls)
+
+
+def test_collect_pipeline_runs_successfully_with_client_credentials_auth(
+    tmp_path, mock_jamf_api
+):
+    from openhound_jamf.auth import JamfClientCredentials
+
+    credentials = JamfClientCredentials(
+        host="https://jamf.test",
+        client_id="jamf-client-id",
+        client_secret="jamf-client-secret",
+    )
+    assert credentials.auth == "client"
+
+    expected_calls = BASE_EXPECTED_CALLS + Counter({"oauth_token": 1})
+
+    _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls)
