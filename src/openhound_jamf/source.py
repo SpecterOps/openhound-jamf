@@ -1,17 +1,15 @@
 from dataclasses import dataclass
-from functools import cache
+from typing import Union
 from urllib.parse import urlsplit
 
 import dlt
-from dlt.common.configuration import configspec
-from dlt.sources.helpers import requests
-from dlt.sources.helpers.rest_client.auth import AuthConfigBase
 from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import (
     PageNumberPaginator,
     SinglePagePaginator,
 )
 
+from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
 from .models import (
     SSO,
@@ -37,36 +35,6 @@ from .models import (
 @dataclass
 class SourceContext:
     client: RESTClient
-
-
-@configspec
-class CustomAuth(AuthConfigBase):
-    def __init__(self, host: str, username: str, password: str):
-        self.host = host
-        self.username = username
-        self.password = password
-
-    @staticmethod
-    @cache
-    def token(host, username, password) -> str:
-        """Calls the JAMF authentication API to generate an API token based on a username/password.
-
-        Args:
-            host (str): The base JAMF URL used for API calls.
-            user (str): The JAMF username used for authentication, read from environment or dlt config file.
-            passw (str): The JAMF password used for authentication, read from environment or dlt config file.
-
-        Returns:
-            dict: A (cached) JAMF API token used for API calls.
-        """
-        response = requests.post(f"{host}/api/v1/auth/token", auth=(username, password))
-        return response.json()["token"]
-
-    def __call__(self, request):
-        request.headers["Authorization"] = (
-            f"Bearer {self.token(self.host, self.username, self.password)}"
-        )
-        return request
 
 
 @app.resource(name="users", parallelized=True, columns=BaseUser)
@@ -304,14 +272,14 @@ def tenant(host: str):
 
 @dlt.source(name="jamf", max_table_nesting=0)
 def source(
-    username=dlt.secrets.value, password=dlt.secrets.value, host=dlt.secrets.value
+    credentials: Union[
+        JamfPasswordCredentials, JamfClientCredentials
+    ] = dlt.secrets.value,
 ):
     """DLT source, defines JAMF collection resources and transformers.
 
     Args:
-        username (str): The JAMF username used for authentication.
-        password (str): The JAMF password used for authentication.
-        host (str): The base JAMF URL used for API calls.
+        credentials (JamfPasswordCredentials | JamfClientCredentials): The JAMF credentials configuration
 
     Returns:
         (tuple[users, user_details, sites, scripts, script_details, policy_details, policies, computers, computerextensionattributes, api_roles, api_integrations, accounts, account_details, account_groups, account_group_details]): A tuple of DLT resources/transformers registered for the JAMF source.
@@ -320,9 +288,9 @@ def source(
 
     ctx = SourceContext(
         client=RESTClient(
-            base_url=host,
+            base_url=credentials.host,
             headers={"accept": "application/json"},
-            auth=CustomAuth(host=host, username=username, password=password),
+            auth=JamfAuth(credentials=credentials),
             paginator=SinglePagePaginator(),
         )
     )
@@ -345,5 +313,5 @@ def source(
         api_integrations(ctx),
         api_roles(ctx),
         sso(ctx),
-        tenant(host),
+        tenant(credentials.host),
     )
