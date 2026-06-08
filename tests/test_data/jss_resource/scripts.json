@@ -1,9 +1,8 @@
-[
-  {
-    "size": 1,
-    "script": {
+{
+  "scripts": [
+    {
       "id": 1,
       "name": "string"
     }
-  }
-]
+  ]
+}

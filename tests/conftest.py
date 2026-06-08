@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from fastapi import Request
 from requests import PreparedRequest, Response
 from requests.hooks import dispatch_hook
 from requests.structures import CaseInsensitiveDict
@@ -39,6 +40,19 @@ def mock_jamf_api() -> Any:
     async def auth_token():
         app.state.calls.append("auth_token")
         return {"token": "test-token"}
+
+    @app.post("/api/v1/oauth/token")
+    async def oauth_token(request: Request):
+        form_data = parse_qs((await request.body()).decode())
+
+        assert form_data == {
+            "grant_type": ["client_credentials"],
+            "client_id": ["jamf-client-id"],
+            "client_secret": ["jamf-client-secret"],
+        }
+
+        app.state.calls.append("oauth_token")
+        return {"access_token": "test-client-token"}
 
     @app.get("/JSSResource/users")
     async def users():
