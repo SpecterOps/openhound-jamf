@@ -24,7 +24,6 @@ class DateTimeLimitations(BaseModel):
     expiration_date: str | None = None
     expiration_date_epoch: int | None = None
     expiration_date_utc: str | None = None
-    # no_execute_on: dict[str, Any] = Field(default_factory=dict)
     no_execute_start: str | None = None
     no_execute_end: str | None = None
 
