@@ -83,7 +83,7 @@ class Scope(BaseModel):
 class Category(BaseModel):
     id: int | None = None
     name: str | None = None
-    display_index: bool | None = None
+    display_in: bool | None = None
     feature_in: bool | None = None
 
 
