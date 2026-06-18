@@ -1,27 +1,10 @@
 from dataclasses import dataclass
-from typing import Any
 
 from openhound.core.asset import BaseAsset
 from pydantic import BaseModel, Field
 
 from openhound_jamf.graph import JAMFNodeProperties
 from openhound_jamf.main import app
-
-# class Trigger(Enum):
-#     CHECKIN = "CHECKIN"
-#     LOGIN = "LOGIN"
-#     OTHER = "OTHER"
-#     STARTUP = "STARTUP"
-#     ENROLLMENT_COMPLETE = "ENROLLMENT_COMPLETE"
-#     NETWORK_STATE_CHANGED = "NETWORK_STATE_CHANGED"
-#     EVENT = "EVENT"
-#     USER_INITIATED = "USER_INITIATED"
-
-
-# class Retry(Enum):
-#     none = "none"
-#     immediate = "immediate"
-#     interval = "interval"
 
 
 class BasePolicy(BaseModel):
@@ -41,7 +24,7 @@ class DateTimeLimitations(BaseModel):
     expiration_date: str | None = None
     expiration_date_epoch: int | None = None
     expiration_date_utc: str | None = None
-    no_execute_on: dict[str, Any] = Field(default_factory=dict)
+    # no_execute_on: dict[str, Any] = Field(default_factory=dict)
     no_execute_start: str | None = None
     no_execute_end: str | None = None
 
@@ -49,7 +32,7 @@ class DateTimeLimitations(BaseModel):
 class NetworkLimitations(BaseModel):
     minimum_network_connection: str | None = None
     any_ip_address: bool | None = None
-    network_segments: list[dict[str, Any]] = Field(default_factory=list)
+    network_segments: list[dict[str, str]] = Field(default_factory=list)
 
 
 class OverrideDefaultSettings(BaseModel):
@@ -78,24 +61,31 @@ class Limitations(BaseModel):
 
 class Exclusions(BaseModel):
     computers: list[Computer]
-    computer_groups: list[dict[str, Any]] = Field(default_factory=list)
-    buildings: list[dict[str, Any]] = Field(default_factory=list)
-    departments: list[dict[str, Any]] = Field(default_factory=list)
-    users: list[dict[str, Any]] = Field(default_factory=list)
-    user_groups: list[dict[str, Any]] = Field(default_factory=list)
-    network_segments: list[dict[str, Any]] = Field(default_factory=list)
-    ibeacons: list[dict[str, Any]] = Field(default_factory=list)
+    computer_groups: list[dict[str, str]] = Field(default_factory=list)
+    buildings: list[dict[str, str]] = Field(default_factory=list)
+    departments: list[dict[str, str]] = Field(default_factory=list)
+    users: list[dict[str, str]] = Field(default_factory=list)
+    user_groups: list[dict[str, str]] = Field(default_factory=list)
+    network_segments: list[dict[str, str]] = Field(default_factory=list)
+    ibeacons: list[dict[str, str]] = Field(default_factory=list)
 
 
 class Scope(BaseModel):
     all_computers: bool
     computers: list[Computer]
-    computer_groups: list[dict[str, Any]] = Field(default_factory=list)
-    buildings: list[dict[str, Any]] = Field(default_factory=list)
-    departments: list[dict[str, Any]] = Field(default_factory=list)
+    computer_groups: list[dict[str, str]] = Field(default_factory=list)
+    buildings: list[dict[str, str]] = Field(default_factory=list)
+    departments: list[dict[str, str]] = Field(default_factory=list)
     limit_to_users: LimitToUsers | None = None
     limitations: Limitations | None = None
     exclusions: Exclusions
+
+
+class Category(BaseModel):
+    id: int | None = None
+    name: str | None = None
+    display_index: bool | None = None
+    feature_in: bool | None = None
 
 
 class SelfService(BaseModel):
@@ -105,13 +95,23 @@ class SelfService(BaseModel):
     reinstall_button_text: str | None = None
     self_service_description: str | None = None
     force_users_to_view_description: bool | None = None
-    self_service_icon: dict[str, Any] = Field(default_factory=dict)
+    self_service_icon: dict[str, str] = Field(default_factory=dict)
     feature_on_main_page: bool | None = None
-    self_service_categories: list[dict[str, Any]] = Field(default_factory=list)
+    self_service_categories: list[Category] = Field(default_factory=list)
+
+
+class Package(BaseModel):
+    id: int | None = None
+    name: str | None = None
+
+
+class Packages(BaseModel):
+    size: int | None = None
+    package: Package | None = None
 
 
 class PackageConfiguration(BaseModel):
-    packages: list[dict[str, Any]] = Field(default_factory=list)
+    packages: list[Package] = Field(default_factory=list)
     distribution_point: str | None = None
 
 
@@ -138,9 +138,31 @@ class OpenFirmwareEfiPassword(BaseModel):
     of_password_sha256: str | None = None
 
 
+class DBinding(BaseModel):
+    id: int | None = None
+    name: str | None = None
+
+
+class DBindings(BaseModel):
+    size: int | None = None
+    binding: DBinding | None = None
+
+
+class MaintenanceAccount(BaseModel):
+    action: str | None = None
+    username: str | None = None
+    admin: bool | None = None
+    home: str | None = None
+
+
+class MaintenanceAccounts(BaseModel):
+    size: int | None = None
+    account: MaintenanceAccount | None = None
+
+
 class AccountMaintenance(BaseModel):
-    accounts: list[dict[str, Any]] = Field(default_factory=list)
-    directory_bindings: list[dict[str, Any]] = Field(default_factory=list)
+    accounts: list[MaintenanceAccounts] = Field(default_factory=list)
+    directory_bindings: list[DBindings] = Field(default_factory=list)
     management_account: ManagementAccount | None = None
     open_firmware_efi_password: OpenFirmwareEfiPassword | None = None
 
@@ -192,6 +214,17 @@ class DiskEncryption(BaseModel):
     action: str | None = None
 
 
+class DockItem(BaseModel):
+    id: int | None = None
+    name: str | None = None
+    action: str | None = None
+
+
+class DockItems(BaseModel):
+    size: int | None = None
+    dock_item: DockItem | None = None
+
+
 @dataclass
 class PolicyProperties(JAMFNodeProperties):
     """JAMF Policy node properties"""
@@ -241,7 +274,7 @@ class Policy(BaseAsset):
     package_configuration: PackageConfiguration | None = None
     scripts: list[Script]
     printers: list | None = Field(default_factory=list)
-    dock_items: list[dict[str, Any]] = Field(default_factory=list)
+    dock_items: list[DockItems] = Field(default_factory=list)
     account_maintenance: AccountMaintenance | None = None
     reboot: Reboot | None = None
     maintenance: Maintenance | None = None
