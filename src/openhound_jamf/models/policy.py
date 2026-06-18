@@ -116,7 +116,7 @@ class Packages(BaseModel):
 
 
 class PackageConfiguration(BaseModel):
-    packages: list[Package] = Field(default_factory=list)
+    packages: list[Packages] = Field(default_factory=list)
     distribution_point: str | None = None
 
 
