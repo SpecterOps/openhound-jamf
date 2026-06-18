@@ -31,7 +31,7 @@ class DateTimeLimitations(BaseModel):
 class NetworkLimitations(BaseModel):
     minimum_network_connection: str | None = None
     any_ip_address: bool | None = None
-    network_segments: list[dict[str, str]] = Field(default_factory=list)
+    network_segments: list[dict[str, IdName]] = Field(default_factory=list)
 
 
 class OverrideDefaultSettings(BaseModel):
@@ -52,29 +52,29 @@ class LimitToUsers(BaseModel):
 
 
 class Limitations(BaseModel):
-    users: list[dict[str, str]] = Field(default_factory=list)
-    user_groups: list[dict[str, str]] = Field(default_factory=list)
-    network_segments: list[dict[str, str]] = Field(default_factory=list)
-    ibeacons: list[dict[str, str]] = Field(default_factory=list)
+    users: list[dict[str, IdName]] = Field(default_factory=list)
+    user_groups: list[dict[str, IdName]] = Field(default_factory=list)
+    network_segments: list[dict[str, IdName]] = Field(default_factory=list)
+    ibeacons: list[dict[str, IdName]] = Field(default_factory=list)
 
 
 class Exclusions(BaseModel):
     computers: list[Computer]
-    computer_groups: list[dict[str, str]] = Field(default_factory=list)
-    buildings: list[dict[str, str]] = Field(default_factory=list)
-    departments: list[dict[str, str]] = Field(default_factory=list)
-    users: list[dict[str, str]] = Field(default_factory=list)
-    user_groups: list[dict[str, str]] = Field(default_factory=list)
-    network_segments: list[dict[str, str]] = Field(default_factory=list)
-    ibeacons: list[dict[str, str]] = Field(default_factory=list)
+    computer_groups: list[dict[str, IdName]] = Field(default_factory=list)
+    buildings: list[dict[str, IdName]] = Field(default_factory=list)
+    departments: list[dict[str, IdName]] = Field(default_factory=list)
+    users: list[dict[str, IdName]] = Field(default_factory=list)
+    user_groups: list[dict[str, IdName]] = Field(default_factory=list)
+    network_segments: list[dict[str, IdName]] = Field(default_factory=list)
+    ibeacons: list[dict[str, IdName]] = Field(default_factory=list)
 
 
 class Scope(BaseModel):
     all_computers: bool
     computers: list[Computer]
-    computer_groups: list[dict[str, str]] = Field(default_factory=list)
-    buildings: list[dict[str, str]] = Field(default_factory=list)
-    departments: list[dict[str, str]] = Field(default_factory=list)
+    computer_groups: list[dict[str, IdName]] = Field(default_factory=list)
+    buildings: list[dict[str, IdName]] = Field(default_factory=list)
+    departments: list[dict[str, IdName]] = Field(default_factory=list)
     limit_to_users: LimitToUsers | None = None
     limitations: Limitations | None = None
     exclusions: Exclusions
@@ -87,6 +87,12 @@ class Category(BaseModel):
     feature_in: bool | None = None
 
 
+class SelfServiceIcon(BaseModel):
+    id: int | None = None
+    filename: str | None = None
+    uri: str | None = None
+
+
 class SelfService(BaseModel):
     use_for_self_service: bool | None = None
     self_service_display_name: str | None = None
@@ -94,7 +100,7 @@ class SelfService(BaseModel):
     reinstall_button_text: str | None = None
     self_service_description: str | None = None
     force_users_to_view_description: bool | None = None
-    self_service_icon: dict[str, str] = Field(default_factory=dict)
+    self_service_icon: SelfServiceIcon = Field(default_factory=dict)
     feature_on_main_page: bool | None = None
     self_service_categories: list[Category] = Field(default_factory=list)
 
