@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 from openhound.core.asset import BaseAsset
@@ -8,22 +7,21 @@ from pydantic import BaseModel, Field
 from openhound_jamf.graph import JAMFNodeProperties
 from openhound_jamf.main import app
 
+# class Trigger(Enum):
+#     CHECKIN = "CHECKIN"
+#     LOGIN = "LOGIN"
+#     OTHER = "OTHER"
+#     STARTUP = "STARTUP"
+#     ENROLLMENT_COMPLETE = "ENROLLMENT_COMPLETE"
+#     NETWORK_STATE_CHANGED = "NETWORK_STATE_CHANGED"
+#     EVENT = "EVENT"
+#     USER_INITIATED = "USER_INITIATED"
 
-class Trigger(Enum):
-    CHECKIN = "CHECKIN"
-    LOGIN = "LOGIN"
-    OTHER = "OTHER"
-    STARTUP = "STARTUP"
-    ENROLLMENT_COMPLETE = "ENROLLMENT_COMPLETE"
-    NETWORK_STATE_CHANGED = "NETWORK_STATE_CHANGED"
-    EVENT = "EVENT"
-    USER_INITIATED = "USER_INITIATED"
 
-
-class Retry(Enum):
-    none = "none"
-    immediate = "immediate"
-    interval = "interval"
+# class Retry(Enum):
+#     none = "none"
+#     immediate = "immediate"
+#     interval = "interval"
 
 
 class BasePolicy(BaseModel):
@@ -68,14 +66,14 @@ class Computer(BaseModel):
 
 
 class LimitToUsers(BaseModel):
-    user_groups: list[dict[str, Any]] = Field(default_factory=list)
+    user_groups: list[dict[str, str]] | list[str] = Field(default_factory=list)
 
 
 class Limitations(BaseModel):
-    users: list[dict[str, Any]] = Field(default_factory=list)
-    user_groups: list[dict[str, Any]] = Field(default_factory=list)
-    network_segments: list[dict[str, Any]] = Field(default_factory=list)
-    ibeacons: list[dict[str, Any]] = Field(default_factory=list)
+    users: list[dict[str, str]] = Field(default_factory=list)
+    user_groups: list[dict[str, str]] = Field(default_factory=list)
+    network_segments: list[dict[str, str]] = Field(default_factory=list)
+    ibeacons: list[dict[str, str]] = Field(default_factory=list)
 
 
 class Exclusions(BaseModel):
@@ -217,7 +215,7 @@ class Policy(BaseAsset):
     id: int
     name: str
     enabled: bool
-    trigger: Trigger | None = None
+    trigger: str | None = None
     trigger_checkin: bool | None = None
     trigger_enrollment_complete: bool | None = None
     trigger_login: bool | None = None
@@ -225,7 +223,7 @@ class Policy(BaseAsset):
     trigger_startup: bool | None = None
     trigger_other: str | None = None
     frequency: str
-    retry_event: Retry | None = None
+    retry_event: str | None = None
     retry_attempts: int | None = None
     notify_on_each_failed_retry: bool | None = None
     location_user_only: bool | None = None
