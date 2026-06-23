@@ -70,10 +70,9 @@ def recurring_script_policies(con, schema: str = "jamf") -> None:
         CREATE OR REPLACE TABLE {schema}.recurring_script_policies AS
         SELECT
             p.id        AS policy_id,
-            p.name      AS policy_name,
             from_json(p.scope, '{{"all_computers": "BOOLEAN"}}').all_computers AS all_computers,
-            from_json(p.scope, '{{"computers": [{{"id":"INTEGER","name":"VARCHAR","udid":"VARCHAR"}}]}}').computers AS scope_computers,
-            from_json(p.scope, '{{"exclusions": {{"computers": [{{"id":"INTEGER","name":"VARCHAR","udid":"VARCHAR"}}]}}}}').exclusions.computers AS exclusion_computers,
+            from_json(p.scope, '{{"computers": [{{"id":"INTEGER"}}]}}').computers AS scope_computers,
+            from_json(p.scope, '{{"exclusions": {{"computers": [{{"udid":"VARCHAR"}}]}}}}').exclusions.computers AS exclusion_computers,
             p.scripts            AS scripts
         FROM {schema}.policy_details p
         WHERE p.enabled = true
