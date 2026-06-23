@@ -12,12 +12,10 @@ from openhound_jamf.main import app
 
 class User(BaseModel):
     id: int
-    name: str | None = None
 
 
 class Site(BaseModel):
     id: int
-    name: str | None = None
 
 
 @dataclass
@@ -36,7 +34,6 @@ class GroupProperties(JAMFNodeProperties):
 
 
 class BaseGroup(BaseModel):
-    name: str | None = None
     id: int
 
 
