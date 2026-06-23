@@ -172,9 +172,6 @@ class ApiIntegration(JAMFAsset):
     id: int
     display_name: str = Field(alias="displayName")
     authorization_scopes: list[str] = Field(alias="authorizationScopes")
-    access_token_lifetime_seconds: int | None = Field(
-        default=None, alias="accessTokenLifetimeSeconds"
-    )
     enabled: bool
     app_type: str = Field(alias="appType")
     client_id: str = Field(alias="clientId")
