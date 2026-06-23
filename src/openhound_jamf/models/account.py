@@ -49,13 +49,11 @@ class AccountProperties(JAMFNodeProperties):
 
 
 class BaseAccount(BaseModel):
-    name: str | None = None
     id: int
 
 
 class Site(BaseModel):
     id: int
-    name: str | None = None
 
 
 class Privilege(BaseModel):
@@ -230,7 +228,6 @@ class Account(JAMFAsset):
     email: str
     email_address: str | None = None
     enabled: str
-    force_password_change: bool | None = None
     access_level: str
     privilege_set: str
     site: Optional[Site] | None = None
