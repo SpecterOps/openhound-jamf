@@ -1,21 +1,11 @@
-from enum import Enum
-from typing import Any
-
 from openhound.core.asset import BaseAsset
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from openhound_jamf.main import app
 
 
-class Priority(Enum):
-    Before = "Before"
-    After = "After"
-    During = "During"
-
-
 class BaseScript(BaseModel):
     id: int
-    name: str | None = None
 
 
 @app.asset(
@@ -37,10 +27,6 @@ class Script(BaseAsset):
     filename: str | None = None
     info: str | None = None
     notes: str | None = None
-    priority: Priority | None = None
-    parameters: dict[str, Any] = Field(default_factory=dict)
-    os_requirements: str | None = None
-    script_contents_encoded: str | None = None
 
     @property
     def as_node(self):

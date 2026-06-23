@@ -21,33 +21,8 @@ class SSOProperties(JAMFNodeProperties):
 
 
 class SAMLSettings(BaseModel):
-    token_expiration_disabled: bool | None = Field(
-        default=None, alias="tokenExpirationDisabled"
-    )
-    user_attribute_enabled: bool | None = Field(
-        default=None, alias="userAttributeEnabled"
-    )
-    user_attribute_name: str | None = Field(default=None, alias="userAttributeName")
-    user_mapping: str | None = Field(default=None, alias="userMapping")
     group_attribute_name: str = Field(alias="groupAttributeName")
     group_rdn_key: str = Field(alias="groupRdnKey")
-    idp_url: str | None = Field(default=None, alias="idpUrl")
-    idp_provider_type: str | None = Field(default=None, alias="idpProviderType")
-    entity_id: str | None = Field(default=None, alias="entityId")
-
-
-class OIDCSettings(BaseModel):
-    user_mapping: str | None = Field(default=None, alias="userMapping")
-    username_attribute_claim_mapping: str | None = Field(
-        default=None, alias="usernameAttributeClaimMapping"
-    )
-    jamf_id_authentication_enabled: bool | None = Field(
-        default=None, alias="jamfIdAuthenticationEnabled"
-    )
-
-
-class EnrollmentConfig(BaseModel):
-    hosts: list[str] = Field(default_factory=list)
 
 
 @app.asset(
@@ -88,23 +63,7 @@ class SSO(JAMFAsset):
     configuration_type: str = Field(alias="configurationType")
     sso_for_enrollment_enabled: bool = Field(alias="ssoForEnrollmentEnabled")
     saml_settings: SAMLSettings | None = Field(alias="samlSettings", default=None)
-    oidc_settings: OIDCSettings | None = Field(alias="oidcSettings", default=None)
     sso_enabled: bool = Field(alias="ssoEnabled")
-    sso_for_mac_os_self_service_enabled: bool | None = Field(
-        default=None, alias="ssoForMacOsSelfServiceEnabled"
-    )
-    enrollment_sso_for_account_driven_enrollment_enabled: bool | None = Field(
-        default=None, alias="enrollmentSsoForAccountDrivenEnrollmentEnabled"
-    )
-    enrollment_sso_config: EnrollmentConfig | None = Field(
-        default=None, alias="enrollmentSsoConfig"
-    )
-    group_enrollment_access_enabled: bool | None = Field(
-        default=None, alias="groupEnrollmentAccessEnabled"
-    )
-    group_enrollment_access_name: str | None = Field(
-        default=None, alias="groupEnrollmentAccessName"
-    )
 
     @property
     def id(self):
