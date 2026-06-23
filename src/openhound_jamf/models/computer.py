@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import datetime
 
 from openhound.core.asset import EdgeDef, NodeDef
 from openhound.core.models.entries_dataclass import Edge, EdgePath, EdgeProperties
@@ -56,31 +55,11 @@ class ComputerProperties(JAMFNodeProperties):
 
 class RemoteManagement(BaseModel):
     managed: bool | None = None
-    management_username: str | None = Field(default=None, alias="managementUsername")
-
-
-class UserManagementInfo(BaseModel):
-    capable_user: str | None = Field(default=None, alias="capableUser")
-    management_id: str | None = Field(default=None, alias="managementId")
-
-
-class MdmCapable(BaseModel):
-    capable: bool | None = None
-    # capable_users: list[str] = Field(alias="capableUsers") deprecated
-    user_management_info: list[UserManagementInfo] = Field(
-        default_factory=list, alias="userManagementInfo"
-    )
 
 
 class Site(BaseModel):
     id: str
     name: str
-
-
-class EnrollmentMethod(BaseModel):
-    id: str | None = None
-    object_name: str | None = Field(alias="objectName", default=None)
-    object_type: str | None = Field(default=None, alias="objectType")
 
 
 class UserAndLocation(BaseModel):
@@ -92,10 +71,6 @@ class UserAndLocation(BaseModel):
 
 
 class Hardware(BaseModel):
-    model: str | None = None
-    make: str | None = None
-    model_identifier: str | None = Field(default=None, alias="modelIdentifier")
-    mac_address: str | None = Field(default=None, alias="macAddress")
     serial_number: str | None = Field(default=None, alias="serialNumber")
     processor_type: str | None = Field(default=None, alias="processorType")
     apple_silicon: bool | None = Field(default=None, alias="appleSilicon")
@@ -127,7 +102,6 @@ class DiskEncryption(BaseModel):
 
 
 class GroupMembership(BaseModel):
-    group_id: str | None = Field(default=None, alias="groupId")
     group_name: str = Field(alias="groupName")
 
 
@@ -171,60 +145,19 @@ class Computer(JAMFAsset):
 
     id: str
     udid: str
-    extension_attributes: list = Field(
-        default_factory=list, alias="extensionAttributes"
-    )
     name: str
     last_ip_address: str | None = Field(default=None, alias="lastIpAddress")
     last_reported_ip_v4: str | None = Field(default=None, alias="lastReportedIpV4")
     last_reported_ip_v6: str | None = Field(default=None, alias="lastReportedIpV6")
     jamf_binary_version: str | None = Field(default=None, alias="jamfBinaryVersion")
-    platform: str | None = None
-    barcode1: str | None = None
-    barcode2: str | None = None
-    asset_tag: str | None = Field(default=None, alias="assetTag")
     remote_management: RemoteManagement | None = Field(
         default=None, alias="remoteManagement"
     )
     supervised: bool | None = None
-    mdm_capable: MdmCapable | None = Field(default=None, alias="mdmCapable")
-    report_date: str | None = Field(default=None, alias="reportDate")
-    last_contact_time: str | None = Field(default=None, alias="lastContactTime")
-    last_cloud_backup_date: str | None = Field(
-        default=None, alias="lastCloudBackupDate"
-    )
-    last_enrolled_date: str | None = Field(default=None, alias="lastEnrolledDate")
-    mdm_profile_expiration: datetime | None = Field(
-        default=None, alias="mdmProfileExpiration"
-    )
-    initial_entry_date: str | None = Field(default=None, alias="initialEntryDate")
-    distribution_point: str | None = Field(default=None, alias="distributionPoint")
-    itunes_store_account_active: bool | None = Field(
-        default=None, alias="itunesStoreAccountActive"
-    )
     enrolled_via_automated_device_enrollment: bool | None = Field(
         default=None, alias="enrolledViaAutomatedDeviceEnrollment"
     )
     user_approved_mdm: bool | None = Field(default=None, alias="userApprovedMdm")
-    enrollment_method: EnrollmentMethod | None = Field(
-        default=None, alias="enrollmentMethod"
-    )
-    declarative_device_management_enabled: bool | None = Field(
-        default=None, alias="declarativeDeviceManagementEnabled"
-    )
-    management_id: str | None = Field(default=None, alias="managementId")
-    last_logged_in_username_self_service: str | None = Field(
-        default=None, alias="lastLoggedInUsernameSelfService"
-    )
-    last_logged_in_username_self_service_timestamp: str | None = Field(
-        default=None, alias="lastLoggedInUsernameSelfServiceTimestamp"
-    )
-    last_logged_in_username_binary: str | None = Field(
-        default=None, alias="lastLoggedInUsernameBinary"
-    )
-    last_logged_in_username_binary_timestamp: str | None = Field(
-        default=None, alias="lastLoggedInUsernameBinaryTimestamp"
-    )
     site: Site
     user_and_location: UserAndLocation | None = Field(
         default=None, alias="userAndLocation"
