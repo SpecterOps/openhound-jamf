@@ -8,6 +8,7 @@ from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+from openhound_jamf.models.utils import NO_SITE_ID_STR
 
 
 @dataclass
@@ -235,7 +236,7 @@ class Computer(JAMFAsset):
 
     @property
     def _contains_tenant_edge(self):
-        if self.site.id == "-1":
+        if self.site.id == NO_SITE_ID_STR:
             yield Edge(
                 kind=ek.CONTAINS,
                 start=EdgePath(match_by="id", value=self.tenant_node_id),
@@ -245,7 +246,7 @@ class Computer(JAMFAsset):
 
     @property
     def _contains_site_edge(self):
-        if self.site.id != "-1":
+        if self.site.id != NO_SITE_ID_STR:
             site_node_id = JAMFNode.guid(self.site.id, nk.SITE, self.tenant_id)
             yield Edge(
                 kind=ek.CONTAINS,

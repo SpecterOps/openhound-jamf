@@ -29,7 +29,7 @@ class SiteProperties(JAMFNodeProperties):
             start=nk.TENANT,
             end=nk.SITE,
             kind=ek.CONTAINS,
-            description="Something something",
+            description="The tenant contains this site.",
         ),
     ],
 )

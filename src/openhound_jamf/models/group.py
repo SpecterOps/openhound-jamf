@@ -2,12 +2,13 @@ from dataclasses import dataclass, field
 
 from openhound.core.asset import EdgeDef, NodeDef
 from openhound.core.models.entries_dataclass import Edge, EdgePath, EdgeProperties
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+from openhound_jamf.models.utils import NO_SITE_ID, normalize_site
 
 
 class User(BaseModel):
@@ -213,9 +214,14 @@ class Group(JAMFAsset):
     name: str
     access_level: str
     privilege_set: str
-    site: Site
+    site: Site = Field(default_factory=lambda: Site(id=NO_SITE_ID))
     privileges: Privilege | None = None
     members: list[User] = Field(default_factory=list)
+
+    @field_validator("site", mode="before")
+    @classmethod
+    def _default_site(cls, v):
+        return normalize_site(v)
 
     @property
     def as_node(self):
@@ -228,7 +234,7 @@ class Group(JAMFAsset):
             displayname=self.name,
             tenant=self.tenant_id,
             tier=0 if tier_eval else 1,
-            site_id=str(self.site.id) if self.site else "-1",
+            site_id=str(self.site.id),
             access_level=self.access_level,
             privilege_objects=self.privileges.jss_objects if self.privileges else [],
             privilege_actions=self.privileges.jss_actions if self.privileges else [],
@@ -256,7 +262,7 @@ class Group(JAMFAsset):
         )
 
     def _target_computers(self):
-        if self.access_level == "Site Access":
+        if self.access_level == "Site Access" and self.site.id != NO_SITE_ID:
             return self._lookup.computers_by_site(str(self.site.id))
         return self._lookup.all_computers()
 
@@ -292,7 +298,7 @@ class Group(JAMFAsset):
 
     @property
     def _admin_to_site_edges(self):
-        if self.access_level == "Site Access" and self.privilege_set == "Administrator":
+        if self.access_level == "Site Access" and self.privilege_set == "Administrator" and self.site.id != NO_SITE_ID:
             site_node_id = JAMFNode.guid(str(self.site.id), nk.SITE, self.tenant_id)
             yield Edge(
                 kind=ek.ADMIN_TO_SITE,
@@ -393,7 +399,7 @@ class Group(JAMFAsset):
             self._has_privilege("Create Scripts")
             or self._has_privilege("Update Scripts")
         ):
-            if self.access_level == "Site Access":
+            if self.access_level == "Site Access" and self.site.id != NO_SITE_ID:
                 site_node_id = JAMFNode.guid(str(self.site.id), nk.SITE, self.tenant_id)
                 yield Edge(
                     kind=ek.SCRIPTS_NON_TRAVERSABLE,
