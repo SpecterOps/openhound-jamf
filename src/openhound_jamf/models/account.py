@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from openhound.core.asset import EdgeDef, NodeDef
 from openhound.core.models.entries_dataclass import (
@@ -9,12 +8,13 @@ from openhound.core.models.entries_dataclass import (
     EdgeProperties,
     PropertyMatch,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+from openhound_jamf.models.utils import NO_SITE_ID, normalize_site
 
 
 @dataclass
@@ -230,9 +230,14 @@ class Account(JAMFAsset):
     enabled: str
     access_level: str
     privilege_set: str
-    site: Optional[Site] | None = None
+    site: Site = Field(default_factory=lambda: Site(id=NO_SITE_ID))
     privileges: Privilege | None = None
     directory_user: bool
+
+    @field_validator("site", mode="before")
+    @classmethod
+    def _default_site(cls, v):
+        return normalize_site(v)
 
     @property
     def as_node(self):
@@ -249,7 +254,7 @@ class Account(JAMFAsset):
             full_name=self.full_name,
             email=self.email,
             enabled=self.enabled == "Enabled",
-            site_id=str(self.site.id) if self.site else "-1",
+            site_id=str(self.site.id),
             access_level=self.access_level,
             privilege_objects=self.privileges.jss_objects if self.privileges else [],
             privilege_actions=self.privileges.jss_actions if self.privileges else [],
@@ -278,7 +283,7 @@ class Account(JAMFAsset):
         )
 
     def _target_computers(self):
-        if self.access_level == "Site Access" and self.site:
+        if self.access_level == "Site Access" and self.site.id != NO_SITE_ID:
             return self._lookup.computers_by_site(str(self.site.id))
         return self._lookup.all_computers()
 
@@ -307,7 +312,7 @@ class Account(JAMFAsset):
         if (
             self.access_level == "Site Access"
             and self.privilege_set == "Administrator"
-            and self.site
+            and self.site.id != NO_SITE_ID
         ):
             site_node_id = JAMFNode.guid(str(self.site.id), nk.SITE, self.tenant_id)
             yield Edge(
@@ -418,7 +423,7 @@ class Account(JAMFAsset):
             self._has_privilege("Create Scripts")
             or self._has_privilege("Update Scripts")
         ):
-            if self.access_level == "Site Access" and self.site:
+            if self.access_level == "Site Access" and self.site.id != NO_SITE_ID:
                 site_node_id = JAMFNode.guid(str(self.site.id), nk.SITE, self.tenant_id)
                 yield Edge(
                     kind=ek.SCRIPTS_NON_TRAVERSABLE,
