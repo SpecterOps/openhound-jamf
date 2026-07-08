@@ -37,6 +37,9 @@ def preproc(ctx: PreProcContext):
         "user_details": "user_details",
         "tenant": "tenant",
         "sso": "sso",
+        "saml_service_provider": "saml_service_provider",
+        "saml_issuer": "saml_issuer",
+        "saml_assertion_consumer_service": "saml_assertion_consumer_service",
     }
     return resources
 

@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from typing import Union
+from xml.etree import ElementTree
 from urllib.parse import urlsplit
 
 import dlt
+from dlt.sources.helpers import requests
 from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import (
     PageNumberPaginator,
@@ -25,6 +27,9 @@ from .models import (
     ComputerextensionAttribute,
     Group,
     Policy,
+    SAMLAssertionConsumerService,
+    SAMLIssuer,
+    SAMLServiceProvider,
     Script,
     Site,
     Tenant,
@@ -35,6 +40,129 @@ from .models import (
 @dataclass
 class SourceContext:
     client: RESTClient
+    base_url: str
+
+
+SAML_METADATA_NS = {"md": "urn:oasis:names:tc:SAML:2.0:metadata"}
+
+
+def _resolve_url(base_url: str, value: str | None) -> str | None:
+    if not value or not value.strip():
+        return None
+    parsed = urlsplit(value)
+    if parsed.scheme and parsed.netloc:
+        return value
+
+    base = urlsplit(base_url)
+    path = value if value.startswith("/") else f"/{value}"
+    return f"{base.scheme}://{base.netloc}{path}"
+
+
+def _text_values(element: ElementTree.Element, path: str) -> list[str]:
+    return [
+        child.text.strip()
+        for child in element.findall(path, SAML_METADATA_NS)
+        if child.text and child.text.strip()
+    ]
+
+
+def _parse_saml_metadata(xml_text: str) -> dict:
+    root = ElementTree.fromstring(xml_text)
+    entity_id = root.attrib.get("entityID")
+    metadata = {"entityId": entity_id}
+
+    sp_descriptor = root.find("md:SPSSODescriptor", SAML_METADATA_NS)
+    if sp_descriptor is not None:
+        services = sp_descriptor.findall(
+            "md:AssertionConsumerService", SAML_METADATA_NS
+        )
+        default_service = next(
+            (service for service in services if service.attrib.get("isDefault") == "true"),
+            services[0] if services else None,
+        )
+        metadata.update(
+            {
+                "acsUrl": (
+                    default_service.attrib.get("Location")
+                    if default_service is not None
+                    else None
+                ),
+                "acsBinding": (
+                    default_service.attrib.get("Binding")
+                    if default_service is not None
+                    else None
+                ),
+                "nameIdFormats": _text_values(
+                    sp_descriptor, "md:NameIDFormat"
+                ),
+            }
+        )
+
+    idp_descriptor = root.find("md:IDPSSODescriptor", SAML_METADATA_NS)
+    if idp_descriptor is not None:
+        services = idp_descriptor.findall("md:SingleSignOnService", SAML_METADATA_NS)
+        post_service = next(
+            (
+                service
+                for service in services
+                if service.attrib.get("Binding", "").endswith(":HTTP-POST")
+            ),
+            services[0] if services else None,
+        )
+        metadata.update(
+            {
+                "ssoUrl": (
+                    post_service.attrib.get("Location")
+                    if post_service is not None
+                    else None
+                ),
+                "ssoBinding": (
+                    post_service.attrib.get("Binding")
+                    if post_service is not None
+                    else None
+                ),
+                "nameIdFormats": _text_values(
+                    idp_descriptor, "md:NameIDFormat"
+                ),
+            }
+        )
+
+    return metadata
+
+
+def _fetch_saml_metadata(url: str | None) -> tuple[dict | None, str | None]:
+    if not url:
+        return None, "metadata URL is empty"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return _parse_saml_metadata(response.text), None
+    except Exception as exc:  # pragma: no cover - exercised by integration runs.
+        return None, f"{url}: {exc}"
+
+
+def _enrich_sso_metadata(response: dict, base_url: str) -> dict:
+    saml_settings = response.get("samlSettings") or {}
+    if response.get("configurationType") != "SAML" or not saml_settings:
+        return response
+
+    metadata = {"errors": []}
+    sp_url = _resolve_url(base_url, saml_settings.get("entityId"))
+    idp_url = _resolve_url(base_url, saml_settings.get("idpUrl"))
+
+    sp_metadata, sp_error = _fetch_saml_metadata(sp_url)
+    if sp_metadata:
+        metadata["sp"] = sp_metadata
+    if sp_error:
+        metadata["errors"].append(f"sp: {sp_error}")
+
+    idp_metadata, idp_error = _fetch_saml_metadata(idp_url)
+    if idp_metadata:
+        metadata["idp"] = idp_metadata
+    if idp_error:
+        metadata["errors"].append(f"idp: {idp_error}")
+
+    return {**response, "samlMetadata": metadata}
 
 
 @app.resource(name="users", parallelized=True, columns=BaseUser)
@@ -215,7 +343,35 @@ def sso(ctx: SourceContext):
         dict: The JAMF SSO settings.
     """
     response = ctx.client.get("/api/v3/sso").json()
+    response = _enrich_sso_metadata(response, ctx.base_url)
     yield response
+
+
+@app.transformer(
+    name="saml_service_provider",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLServiceProvider,
+)
+def saml_service_provider(sso_config):
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_issuer", data_from=sso, parallelized=True, columns=SAMLIssuer
+)
+def saml_issuer(sso_config):
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_assertion_consumer_service",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAssertionConsumerService,
+)
+def saml_assertion_consumer_service(sso_config):
+    yield sso_config
 
 
 @app.resource(name="computers", parallelized=True, columns=Computer)
@@ -292,7 +448,8 @@ def source(
             headers={"accept": "application/json"},
             auth=JamfAuth(credentials=credentials),
             paginator=SinglePagePaginator(),
-        )
+        ),
+        base_url=credentials.host,
     )
 
     users_resource = users(ctx)
@@ -300,6 +457,8 @@ def source(
     scripts_resource = scripts(ctx)
     accounts_resource = accounts(ctx)
     groups_resource = account_groups(ctx)
+
+    sso_resource = sso(ctx)
 
     return (
         users_resource | user_details(ctx),
@@ -312,6 +471,9 @@ def source(
         sites(ctx),
         api_integrations(ctx),
         api_roles(ctx),
-        sso(ctx),
+        sso_resource,
+        sso_resource | saml_service_provider(),
+        sso_resource | saml_issuer(),
+        sso_resource | saml_assertion_consumer_service(),
         tenant(credentials.host),
     )
