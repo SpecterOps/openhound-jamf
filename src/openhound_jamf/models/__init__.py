@@ -7,7 +7,7 @@ from .group import BaseGroup, Group
 from .policy import BasePolicy, Policy
 from .script import BaseScript, Script
 from .site import Site
-from .sso import SSO
+from .sso import SSO, SAMLAssertionConsumerService, SAMLIssuer, SAMLServiceProvider
 from .tenant import Tenant
 from .user import BaseUser, User
 
@@ -29,4 +29,7 @@ __all__ = [
     "User",
     "Site",
     "SSO",
+    "SAMLAssertionConsumerService",
+    "SAMLIssuer",
+    "SAMLServiceProvider",
 ]

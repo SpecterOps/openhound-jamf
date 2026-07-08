@@ -12,3 +12,7 @@ SITE = "jamf_Site"
 TENANT = "jamf_Tenant"
 API_ROLE = "jamf_ApiRole"  # Not an explicit node in collection data
 SSO_INTEGRATION = "jamf_SSOIntegration"
+
+SAML_SERVICE_PROVIDER = "SAML_ServiceProvider"
+SAML_ISSUER = "SAML_Issuer"
+SAML_ASSERTION_CONSUMER_SERVICE = "SAML_AssertionConsumerService"

@@ -135,6 +135,126 @@ class TestAdminToSiteEdges:
 
 
 # ---------------------------------------------------------------------------
+# SAML normalized output
+# ---------------------------------------------------------------------------
+
+def _make_saml_sso(model_cls, extra: dict | None = None, lookup=None):
+    base = dict(
+        configurationType="SAML",
+        samlSettings={
+            "userMapping": "EMAIL",
+            "groupAttributeName": "http://schemas.xmlsoap.org/claims/Group",
+            "groupRdnKey": " ",
+            "idpProviderType": "OKTA",
+            "idpUrl": "https://example.idp.com/app/id/sso/saml/metadata",
+            "entityId": "https://jamf.test/saml/metadata",
+            "metadataSource": "URL",
+        },
+        samlMetadata={
+            "sp": {
+                "entityId": "https://jamf.test/saml/metadata",
+                "acsUrl": "https://jamf.test/saml/SSO",
+                "acsBinding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+                "nameIdFormats": [
+                    "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+                ],
+            },
+            "idp": {
+                "entityId": "http://www.okta.com/example-jamf-app",
+                "ssoUrl": "https://example.idp.com/app/id/sso/saml",
+                "ssoBinding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+                "nameIdFormats": [
+                    "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+                ],
+            },
+            "errors": [],
+        },
+        ssoEnabled=True,
+    )
+    if extra:
+        base.update(extra)
+    asset = model_cls(**base)
+    asset._lookup = lookup or _make_lookup()
+    return asset
+
+
+class TestSAMLNormalizedOutput:
+    def test_service_provider_emits_route_and_account_edges(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.kinds import nodes as nk
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        lookup = _make_lookup()
+        lookup.all_account_saml_bindings.return_value = [
+            {
+                "id": 1,
+                "name": "alice",
+                "full_name": "Alice Example",
+                "email": "alice@example.com",
+                "email_address": "alice@example.com",
+                "enabled": "Enabled",
+            },
+            {
+                "id": 2,
+                "name": "bob",
+                "full_name": "Bob Example",
+                "email": "bob@example.com",
+                "email_address": "bob@example.com",
+                "enabled": "Disabled",
+            },
+        ]
+
+        service_provider = _make_saml_sso(SAMLServiceProvider, lookup=lookup)
+
+        node = service_provider.as_node
+        assert node.kinds == [nk.SAML_SERVICE_PROVIDER]
+        assert node.properties.enabled is True
+        assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
+
+        emitted_edges = list(service_provider.edges)
+        assert [edge.kind for edge in emitted_edges].count(ek.SAML_IMPLEMENTS) == 1
+        assert [edge.kind for edge in emitted_edges].count(ek.SAML_TRUSTS_ISSUER) == 1
+        assert (
+            [edge.kind for edge in emitted_edges].count(
+                ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE
+            )
+            == 1
+        )
+
+        account_edges = [
+            edge for edge in emitted_edges if edge.kind == ek.SAML_HAS_ACCOUNT
+        ]
+        assert len(account_edges) == 2
+        assert account_edges[0].properties.match_values == ["alice@example.com"]
+        assert account_edges[0].properties.account_state == "enabled"
+        assert account_edges[1].properties.match_values == ["bob@example.com"]
+        assert account_edges[1].properties.account_state == "disabled"
+
+    def test_issuer_node_preserves_exact_trusted_entity_id(self):
+        from openhound_jamf.kinds import nodes as nk
+        from openhound_jamf.models.sso import SAMLIssuer
+
+        issuer = _make_saml_sso(SAMLIssuer)
+
+        node = issuer.as_node
+        assert node.kinds == [nk.SAML_ISSUER]
+        assert node.properties.entity_id == "http://www.okta.com/example-jamf-app"
+        assert node.properties.comparison_mode == "exact_trimmed"
+
+    def test_acs_node_preserves_exact_route_key(self):
+        from openhound_jamf.kinds import nodes as nk
+        from openhound_jamf.models.sso import SAMLAssertionConsumerService
+
+        acs = _make_saml_sso(SAMLAssertionConsumerService)
+
+        node = acs.as_node
+        assert node.kinds == [nk.SAML_ASSERTION_CONSUMER_SERVICE]
+        assert node.properties.acs_url == "https://jamf.test/saml/SSO"
+        assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
+        assert node.properties.route_key == "acs_url + sp_entity_id"
+
+
+# ---------------------------------------------------------------------------
 # DuckDB transform tests — site column with JSON sentinel
 # ---------------------------------------------------------------------------
 

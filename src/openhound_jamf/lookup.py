@@ -54,6 +54,17 @@ class JamfLookup(LookupManager):
         return self._find_all_objects(f"SELECT id FROM {self.schema}.account_details")
 
     @lru_cache
+    def all_account_saml_bindings(self):
+        rows = self.client.execute(
+            f"""
+            SELECT id, name, full_name, email, email_address, enabled
+            FROM {self.schema}.account_details
+            """
+        ).fetchall()
+        keys = ("id", "name", "full_name", "email", "email_address", "enabled")
+        return [dict(zip(keys, row, strict=True)) for row in rows]
+
+    @lru_cache
     def all_groups(self):
         return self._find_all_objects(
             f"SELECT id FROM {self.schema}.account_group_details"

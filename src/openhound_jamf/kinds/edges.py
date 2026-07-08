@@ -29,3 +29,8 @@ UPDATE_SSO_SETTINGS = "jamf_Update_SSO_Settings"
 MATCHED_EMAIL = "jamf_MatchedEmail"
 MATCHED_NAME = "jamf_MatchedName"
 AZ_MATCHED_EMAIL = "jamf_AZMatchedEmail"
+
+SAML_IMPLEMENTS = "SAML_Implements"
+SAML_TRUSTS_ISSUER = "SAML_TrustsIssuer"
+SAML_HAS_ASSERTION_CONSUMER_SERVICE = "SAML_HasAssertionConsumerService"
+SAML_HAS_ACCOUNT = "SAML_HasAccount"
