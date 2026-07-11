@@ -26,6 +26,7 @@ from .models import (
     Computer,
     ComputerextensionAttribute,
     Group,
+    InventoryAssignedUser,
     Policy,
     SAMLAssertionConsumerService,
     SAMLIssuer,
@@ -80,8 +81,20 @@ def _parse_saml_metadata(xml_text: str) -> dict:
             (service for service in services if service.attrib.get("isDefault") == "true"),
             services[0] if services else None,
         )
+        assertion_consumer_services = [
+            {
+                "acsUrl": service.attrib.get("Location"),
+                "acsBinding": service.attrib.get("Binding"),
+                "index": service.attrib.get("index"),
+                "isDefault": service.attrib.get("isDefault") == "true",
+            }
+            for service in services
+            if service.attrib.get("Location")
+        ]
         metadata.update(
             {
+                # Keep the preferred endpoint for backwards-compatible raw output,
+                # while retaining every route needed for SAML normalization.
                 "acsUrl": (
                     default_service.attrib.get("Location")
                     if default_service is not None
@@ -92,6 +105,7 @@ def _parse_saml_metadata(xml_text: str) -> dict:
                     if default_service is not None
                     else None
                 ),
+                "assertionConsumerServices": assertion_consumer_services,
                 "nameIdFormats": _text_values(
                     sp_descriptor, "md:NameIDFormat"
                 ),
@@ -163,6 +177,30 @@ def _enrich_sso_metadata(response: dict, base_url: str) -> dict:
         metadata["errors"].append(f"idp: {idp_error}")
 
     return {**response, "samlMetadata": metadata}
+
+
+def _saml_acs_entries(sso_config: dict) -> list[dict]:
+    """Return every usable ACS endpoint from enriched Jamf SAML metadata."""
+    sp_metadata = (sso_config.get("samlMetadata") or {}).get("sp") or {}
+    endpoints = [
+        endpoint
+        for endpoint in sp_metadata.get("assertionConsumerServices", [])
+        if endpoint.get("acsUrl")
+    ]
+    if endpoints:
+        return endpoints
+
+    # Existing collected fixtures may only contain the pre-multi-endpoint shape.
+    if sp_metadata.get("acsUrl"):
+        return [
+            {
+                "acsUrl": sp_metadata["acsUrl"],
+                "acsBinding": sp_metadata.get("acsBinding"),
+                "index": None,
+                "isDefault": True,
+            }
+        ]
+    return []
 
 
 @app.resource(name="users", parallelized=True, columns=BaseUser)
@@ -371,7 +409,8 @@ def saml_issuer(sso_config):
     columns=SAMLAssertionConsumerService,
 )
 def saml_assertion_consumer_service(sso_config):
-    yield sso_config
+    for acs in _saml_acs_entries(sso_config):
+        yield {**sso_config, "samlAcs": acs}
 
 
 @app.resource(name="computers", parallelized=True, columns=Computer)
@@ -392,6 +431,27 @@ def computers(ctx: SourceContext):
                 **computer,
                 **general,
             }
+
+
+@app.transformer(
+    name="computer_inventory_users",
+    data_from=computers,
+    parallelized=True,
+    columns=InventoryAssignedUser,
+)
+def computer_inventory_users(computer):
+    """Yield legacy-compatible assigned-user evidence from computer inventory."""
+
+    user = computer.get("userAndLocation") or {}
+    if not any(user.get(field) for field in ("username", "email", "realname")):
+        return
+    yield {
+        "computer_id": str(computer["id"]),
+        "username": user.get("username"),
+        "realname": user.get("realname"),
+        "email": user.get("email"),
+        "phone": user.get("phone"),
+    }
 
 
 @app.resource(name="api_integrations", parallelized=True, columns=ApiIntegration)
@@ -457,6 +517,7 @@ def source(
     scripts_resource = scripts(ctx)
     accounts_resource = accounts(ctx)
     groups_resource = account_groups(ctx)
+    computers_resource = computers(ctx)
 
     sso_resource = sso(ctx)
 
@@ -466,7 +527,8 @@ def source(
         scripts_resource | script_details(ctx),
         accounts_resource | account_details(ctx),
         groups_resource | account_group_details(ctx),
-        computers(ctx),
+        computers_resource,
+        computers_resource | computer_inventory_users(),
         computerextensionattributes(ctx),
         sites(ctx),
         api_integrations(ctx),

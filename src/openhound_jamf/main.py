@@ -28,6 +28,7 @@ def preproc(ctx: PreProcContext):
         "account_details": "account_details",
         "account_group_details": "account_group_details",
         "computers": "computers",
+        "computer_inventory_users": "computer_inventory_users",
         "policy_details": "policy_details",
         "script_details": "script_details",
         "api_integrations": "api_integrations",

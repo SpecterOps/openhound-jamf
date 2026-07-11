@@ -4,7 +4,12 @@ from openhound.core.asset import EdgeDef, NodeDef
 from openhound.core.models.entries_dataclass import Edge, EdgePath, EdgeProperties
 from pydantic import BaseModel, Field
 
-from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
+from openhound_jamf.graph import (
+    JAMFAsset,
+    JAMFAssignedUserEdgeProperties,
+    JAMFNode,
+    JAMFNodeProperties,
+)
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
@@ -103,7 +108,17 @@ class User(JAMFAsset):
                     kind=ek.ASSIGNED_USER,
                     start=EdgePath(match_by="id", value=computer_id),
                     end=EdgePath(match_by="id", value=node_id),
-                    properties=EdgeProperties(traversable=True),
+                    properties=JAMFAssignedUserEdgeProperties(
+                        traversable=True,
+                        match_type="hard",
+                        confidence="high",
+                        evidence_source="jamf_user_links_computers",
+                        match_basis="jamf_native_id",
+                        reason=(
+                            "Jamf user details explicitly link this native user ID "
+                            "to the computer ID."
+                        ),
+                    ),
                 )
 
     @property
@@ -138,3 +153,122 @@ class User(JAMFAsset):
         yield from self._assigned_user_edges
         yield from self._matched_email_edges
         yield from self._matched_name_edges
+
+
+@app.asset(
+    description=(
+        "Legacy-compatible Jamf computer inventory user evidence. Emits a soft "
+        "AssignedUser relationship only when no native user/computer link exists."
+    ),
+    node=NodeDef(
+        kind=nk.USER,
+        description="Jamf Computer User node derived from inventory evidence",
+        icon="user",
+        properties=UserProperties,
+    ),
+    edges=[
+        EdgeDef(
+            start=nk.COMPUTER,
+            end=nk.USER,
+            kind=ek.ASSIGNED_USER,
+            description=(
+                "Computer inventory USER_AND_LOCATION data identifies an assigned "
+                "user without a native Jamf user/computer link."
+            ),
+            traversable=True,
+        )
+    ],
+)
+class InventoryAssignedUser(JAMFAsset):
+    computer_id: str
+    username: str | None = None
+    realname: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+    @property
+    def _match(self) -> tuple[int | str, str, str] | None:
+        if self.email:
+            matches = self._lookup.users_by_email(self.email.strip())
+            if len(matches) == 1:
+                return matches[0][0], "email", "medium"
+        if self.username:
+            matches = self._lookup.users_by_name(self.username.strip())
+            if len(matches) == 1:
+                return matches[0][0], "username", "low"
+        return None
+
+    @property
+    def _synthetic_id(self) -> str:
+        identity = (self.email or self.username or self.realname or self.computer_id)
+        return f"inventory:{identity.strip().casefold()}"
+
+    @property
+    def _target_raw_id(self) -> int | str:
+        match = self._match
+        return match[0] if match else self._synthetic_id
+
+    @property
+    def _target_node_id(self) -> str:
+        return JAMFNode.guid(str(self._target_raw_id), nk.USER, self.tenant_id)
+
+    @property
+    def as_node(self):
+        if self._match:
+            return None
+        name = self.username or self.email or self.realname or self._synthetic_id
+        return JAMFNode(
+            kinds=[nk.USER],
+            properties=UserProperties(
+                id=self._synthetic_id,
+                name=name,
+                displayname=self.realname or name,
+                tenant=self.tenant_id,
+                email=self.email,
+                phone_number=self.phone or "",
+                full_name=self.realname or name,
+                tier=1,
+                environmentid=self.tenant_node_id,
+            ),
+        )
+
+    @property
+    def edges(self):
+        match = self._match
+        if match and self._lookup.user_has_computer_link(
+            match[0], self.computer_id
+        ):
+            return
+
+        if match:
+            match_basis, confidence = match[1], match[2]
+            reason = (
+                "Legacy-compatible inference: Jamf computer inventory "
+                f"USER_AND_LOCATION matched one collected Jamf user by {match_basis}; "
+                "no native user/computer link was present."
+            )
+        else:
+            match_basis = "inventory_email" if self.email else "inventory_username"
+            confidence = "low"
+            reason = (
+                "Legacy-compatible inference: Jamf computer inventory "
+                "USER_AND_LOCATION identified a user that could not be hard-matched "
+                "to a collected Jamf user ID."
+            )
+
+        yield Edge(
+            kind=ek.ASSIGNED_USER,
+            start=EdgePath(
+                match_by="id",
+                value=JAMFNode.guid(self.computer_id, nk.COMPUTER, self.tenant_id),
+            ),
+            end=EdgePath(match_by="id", value=self._target_node_id),
+            properties=JAMFAssignedUserEdgeProperties(
+                traversable=True,
+                match_type="soft_legacy",
+                confidence=confidence,
+                evidence_source="jamf_computer_inventory_user_and_location",
+                match_basis=match_basis,
+                reason=reason,
+            ),
+        )

@@ -28,7 +28,23 @@ class SSOProperties(JAMFNodeProperties):
 
 @dataclass
 class SAMLNodeProperties(NodeProperties):
-    """Normalized SAML node properties emitted from Jamf SSO evidence."""
+    """Normalized SAML node properties emitted from Jamf SSO evidence.
+
+    Attributes:
+        objectid: Stable source object identifier used to derive the OpenGraph ID.
+        source_kind: Collector source that produced the SAML evidence.
+        schema_contract_version: Normalized SAML contract version.
+        enabled: Whether the Jamf SSO service provider is enabled.
+        native_object_id: Identifier of the native Jamf SSO integration.
+        native_object_kind: OpenGraph kind of the native Jamf SSO integration.
+        sp_entity_id: Service-provider entity ID associated with this SAML route.
+        entity_id: SAML entity ID for a service provider or trusted issuer.
+        issuer: Trusted upstream SAML issuer entity ID.
+        acs_url: Assertion consumer service endpoint URL.
+        route_key: Description of the route fields used for correlation.
+        comparison_mode: Matching behavior required for issuer correlation.
+        metadata_errors: Metadata retrieval or parsing failures retained for diagnostics.
+    """
 
     objectid: str
     source_kind: str
@@ -42,6 +58,7 @@ class SAMLNodeProperties(NodeProperties):
     acs_url: str | None = None
     route_key: str | None = None
     comparison_mode: str | None = None
+    metadata_errors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -55,6 +72,16 @@ class SAMLNode(BaseNode):
 
 @dataclass
 class SAMLEdgeProperties(EdgeProperties):
+    """Properties attached to normalized Jamf SAML relationship evidence.
+
+    Attributes:
+        model_layer: SAML processing layer that emitted the relationship.
+        route_evidence: Native evidence supporting an issuer or ACS route.
+        match_values: Authoritative values used to match an IdP assertion to a Jamf account.
+        account_state: Normalized lifecycle state of the Jamf account.
+        mapping_attribute: Jamf attribute selected by the configured user mapping.
+    """
+
     model_layer: str = "adapter input"
     route_evidence: str | None = None
     match_values: list[str] | None = None
@@ -62,11 +89,22 @@ class SAMLEdgeProperties(EdgeProperties):
     mapping_attribute: str | None = None
 
 
+class ParsedAssertionConsumerService(BaseModel):
+    acs_url: str | None = Field(alias="acsUrl", default=None)
+    acs_binding: str | None = Field(alias="acsBinding", default=None)
+    index: str | None = None
+    is_default: bool = Field(alias="isDefault", default=False)
+
+
 class ParsedServiceProviderMetadata(BaseModel):
     entity_id: str | None = Field(alias="entityId", default=None)
     acs_url: str | None = Field(alias="acsUrl", default=None)
     acs_binding: str | None = Field(alias="acsBinding", default=None)
     name_id_formats: list[str] = Field(alias="nameIdFormats", default_factory=list)
+    assertion_consumer_services: list[ParsedAssertionConsumerService] = Field(
+        alias="assertionConsumerServices",
+        default_factory=list,
+    )
 
 
 class ParsedIdentityProviderMetadata(BaseModel):
@@ -233,9 +271,31 @@ class SAMLSSOBase(JAMFAsset):
 
     @property
     def acs_url(self) -> str | None:
-        if self.saml_metadata and self.saml_metadata.sp:
-            return self.saml_metadata.sp.acs_url
+        acs = self.acs_services
+        if acs:
+            return acs[0].acs_url
         return None
+
+    @property
+    def acs_services(self) -> list[ParsedAssertionConsumerService]:
+        if not self.saml_metadata or not self.saml_metadata.sp:
+            return []
+        services = [
+            service
+            for service in self.saml_metadata.sp.assertion_consumer_services
+            if service.acs_url
+        ]
+        if services:
+            return services
+        if self.saml_metadata.sp.acs_url:
+            return [
+                ParsedAssertionConsumerService(
+                    acsUrl=self.saml_metadata.sp.acs_url,
+                    acsBinding=self.saml_metadata.sp.acs_binding,
+                    isDefault=True,
+                )
+            ]
+        return []
 
     @property
     def issuer_entity_id(self) -> str | None:
@@ -267,17 +327,30 @@ class SAMLSSOBase(JAMFAsset):
             return None
         return SAMLNode.guid(self.issuer_objectid, nk.SAML_ISSUER)
 
+    def acs_objectid_for(self, acs_url: str | None) -> str | None:
+        if not acs_url or not self.sp_entity_id:
+            return None
+        return f"saml-acs:{acs_url}|{self.sp_entity_id}"
+
     @property
     def acs_objectid(self) -> str | None:
-        if not self.acs_url or not self.sp_entity_id:
+        return self.acs_objectid_for(self.acs_url)
+
+    def acs_node_id_for(self, acs_url: str | None) -> str | None:
+        objectid = self.acs_objectid_for(acs_url)
+        if not objectid:
             return None
-        return f"saml-acs:{self.acs_url}|{self.sp_entity_id}"
+        return SAMLNode.guid(objectid, nk.SAML_ASSERTION_CONSUMER_SERVICE)
 
     @property
     def acs_node_id(self) -> str | None:
-        if not self.acs_objectid:
-            return None
-        return SAMLNode.guid(self.acs_objectid, nk.SAML_ASSERTION_CONSUMER_SERVICE)
+        return self.acs_node_id_for(self.acs_url)
+
+    @property
+    def metadata_errors(self) -> list[str]:
+        if not self.saml_metadata:
+            return []
+        return self.saml_metadata.errors
 
     @property
     def match_mapping_attribute(self) -> str | None:
@@ -298,6 +371,17 @@ class SAMLSSOBase(JAMFAsset):
         if not value:
             return []
         return [str(value)]
+
+    @staticmethod
+    def account_state(account) -> str:
+        value = account.get("enabled")
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized == "enabled":
+                return "enabled"
+            if normalized == "disabled":
+                return "disabled"
+        return "unknown"
 
     @property
     def as_node(self):
@@ -359,6 +443,7 @@ class SAMLServiceProvider(SAMLSSOBase):
             native_object_kind=nk.SSO_INTEGRATION,
             sp_entity_id=self.sp_entity_id,
             entity_id=self.sp_entity_id,
+            metadata_errors=self.metadata_errors,
         )
         return SAMLNode(kinds=[nk.SAML_SERVICE_PROVIDER], properties=properties)
 
@@ -384,11 +469,16 @@ class SAMLServiceProvider(SAMLSSOBase):
 
     @property
     def _has_acs_edge(self):
-        if self.service_provider_node_id and self.acs_node_id:
+        if not self.service_provider_node_id:
+            return
+        for acs in self.acs_services:
+            acs_node_id = self.acs_node_id_for(acs.acs_url)
+            if not acs_node_id:
+                continue
             yield Edge(
                 kind=ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE,
                 start=EdgePath(match_by="id", value=self.service_provider_node_id),
-                end=EdgePath(match_by="id", value=self.acs_node_id),
+                end=EdgePath(match_by="id", value=acs_node_id),
                 properties=SAMLEdgeProperties(route_evidence="acs_url + sp_entity_id"),
             )
 
@@ -404,14 +494,13 @@ class SAMLServiceProvider(SAMLSSOBase):
                 continue
 
             account_node_id = JAMFNode.guid(account_id, nk.ACCOUNT, self.tenant_id)
-            account_state = "enabled" if account.get("enabled") == "Enabled" else "disabled"
             yield Edge(
                 kind=ek.SAML_HAS_ACCOUNT,
                 start=EdgePath(match_by="id", value=self.service_provider_node_id),
                 end=EdgePath(match_by="id", value=account_node_id),
                 properties=SAMLEdgeProperties(
                     match_values=match_values,
-                    account_state=account_state,
+                    account_state=self.account_state(account),
                     mapping_attribute=self.match_mapping_attribute,
                 ),
             )
@@ -447,6 +536,7 @@ class SAMLIssuer(SAMLSSOBase):
             entity_id=self.issuer_entity_id,
             issuer=self.issuer_entity_id,
             comparison_mode="exact_trimmed",
+            metadata_errors=self.metadata_errors,
         )
         return SAMLNode(kinds=[nk.SAML_ISSUER], properties=properties)
 
@@ -465,19 +555,35 @@ class SAMLIssuer(SAMLSSOBase):
     ),
 )
 class SAMLAssertionConsumerService(SAMLSSOBase):
+    saml_acs: ParsedAssertionConsumerService | None = Field(
+        alias="samlAcs",
+        default=None,
+    )
+
+    @property
+    def selected_acs(self) -> ParsedAssertionConsumerService | None:
+        if self.saml_acs and self.saml_acs.acs_url:
+            return self.saml_acs
+        return self.acs_services[0] if self.acs_services else None
+
     @property
     def as_node(self):
-        if not self.acs_objectid or not self.acs_url or not self.sp_entity_id:
+        acs = self.selected_acs
+        if not acs or not acs.acs_url or not self.sp_entity_id:
+            return None
+        objectid = self.acs_objectid_for(acs.acs_url)
+        if not objectid:
             return None
         properties = SAMLNodeProperties(
-            objectid=self.acs_objectid,
-            name=f"Jamf ACS {self.acs_url}",
-            displayname=f"Jamf ACS {self.acs_url}",
+            objectid=objectid,
+            name=f"Jamf ACS {acs.acs_url}",
+            displayname=f"Jamf ACS {acs.acs_url}",
             environmentid=self.tenant_node_id,
             source_kind="jamf",
-            acs_url=self.acs_url,
+            acs_url=acs.acs_url,
             sp_entity_id=self.sp_entity_id,
             route_key="acs_url + sp_entity_id",
+            metadata_errors=self.metadata_errors,
         )
         return SAMLNode(
             kinds=[nk.SAML_ASSERTION_CONSUMER_SERVICE], properties=properties

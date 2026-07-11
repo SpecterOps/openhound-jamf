@@ -40,3 +40,21 @@ BloodHound.
 Follow the OpenHound docs to get started:
 
 - [OpenHound Documentation](https://bloodhound.specterops.io/openhound/overview)
+
+## Jamf privileges and assigned-user evidence
+
+The Jamf API role used by the collector must include `Read Computers` and
+`Read User` (singular). `Read User` permits the Classic API
+`/JSSResource/users` reads used for authoritative user-to-computer links.
+
+`jamf_AssignedUser` edges describe how the relationship was established:
+
+| `match_type` | `confidence` | Evidence |
+|---|---|---|
+| `hard` | `high` | A native Jamf user detail explicitly links the user ID to the computer ID. |
+| `soft_legacy` | `medium` | Computer inventory `USER_AND_LOCATION` matched exactly one collected user by email, but no native link exists. |
+| `soft_legacy` | `low` | Inventory matched by username or required a stable synthetic inventory user. |
+
+Inspect `evidence_source`, `match_basis`, and `reason` for the supporting field
+and explanation. The converter suppresses a soft inventory edge when the same
+native user/computer pair already produced a hard edge.
