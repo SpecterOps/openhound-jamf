@@ -9,7 +9,7 @@ from .script import BaseScript, Script
 from .site import Site
 from .sso import SSO, SAMLAssertionConsumerService, SAMLIssuer, SAMLServiceProvider
 from .tenant import Tenant
-from .user import BaseUser, User
+from .user import BaseUser, InventoryAssignedUser, User
 
 __all__ = [
     "BaseAccount",
@@ -26,6 +26,7 @@ __all__ = [
     "ComputerextensionAttribute",
     "Tenant",
     "BaseUser",
+    "InventoryAssignedUser",
     "User",
     "Site",
     "SSO",

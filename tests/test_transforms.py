@@ -155,6 +155,14 @@ def _make_saml_sso(model_cls, extra: dict | None = None, lookup=None):
                 "entityId": "https://jamf.test/saml/metadata",
                 "acsUrl": "https://jamf.test/saml/SSO",
                 "acsBinding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+                "assertionConsumerServices": [
+                    {
+                        "acsUrl": "https://jamf.test/saml/SSO",
+                        "acsBinding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+                        "index": "0",
+                        "isDefault": True,
+                    }
+                ],
                 "nameIdFormats": [
                     "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
                 ],
@@ -252,6 +260,122 @@ class TestSAMLNormalizedOutput:
         assert node.properties.acs_url == "https://jamf.test/saml/SSO"
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
         assert node.properties.route_key == "acs_url + sp_entity_id"
+
+    def test_unknown_account_state_is_not_treated_as_disabled(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        lookup = _make_lookup()
+        lookup.all_account_saml_bindings.return_value = [
+            {
+                "id": 1,
+                "name": "alice",
+                "full_name": "Alice Example",
+                "email": "alice@example.com",
+                "email_address": "alice@example.com",
+                "enabled": None,
+            }
+        ]
+
+        service_provider = _make_saml_sso(SAMLServiceProvider, lookup=lookup)
+        edge = next(
+            edge for edge in service_provider.edges if edge.kind == ek.SAML_HAS_ACCOUNT
+        )
+
+        assert edge.properties.account_state == "unknown"
+
+    def test_disabled_sso_keeps_structural_evidence(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        service_provider = _make_saml_sso(
+            SAMLServiceProvider,
+            extra={"ssoEnabled": False},
+        )
+
+        assert service_provider.as_node.properties.enabled is False
+        edge_kinds = {edge.kind for edge in service_provider.edges}
+        assert ek.SAML_IMPLEMENTS in edge_kinds
+        assert ek.SAML_TRUSTS_ISSUER in edge_kinds
+        assert ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE in edge_kinds
+
+    def test_missing_acs_withholds_acs_route_evidence(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import (
+            SAMLAssertionConsumerService,
+            SAMLServiceProvider,
+        )
+
+        metadata = {
+            "sp": {"entityId": "https://jamf.test/saml/metadata"},
+            "idp": {"entityId": "http://www.okta.com/example-jamf-app"},
+            "errors": ["sp: metadata omits AssertionConsumerService"],
+        }
+        service_provider = _make_saml_sso(
+            SAMLServiceProvider,
+            extra={"samlMetadata": metadata},
+        )
+        acs = _make_saml_sso(
+            SAMLAssertionConsumerService,
+            extra={"samlMetadata": metadata},
+        )
+
+        assert acs.as_node is None
+        assert all(
+            edge.kind != ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE
+            for edge in service_provider.edges
+        )
+        assert service_provider.as_node.properties.metadata_errors == metadata["errors"]
+
+    def test_unsupported_mapping_withholds_account_edges(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        settings = {
+            "userMapping": "CUSTOM_ATTRIBUTE",
+            "groupAttributeName": "http://schemas.xmlsoap.org/claims/Group",
+            "groupRdnKey": " ",
+            "idpProviderType": "OKTA",
+            "idpUrl": "https://example.idp.com/app/id/sso/saml/metadata",
+            "entityId": "https://jamf.test/saml/metadata",
+            "metadataSource": "URL",
+        }
+        service_provider = _make_saml_sso(
+            SAMLServiceProvider,
+            extra={"samlSettings": settings},
+        )
+
+        edge_kinds = {edge.kind for edge in service_provider.edges}
+        assert ek.SAML_TRUSTS_ISSUER in edge_kinds
+        assert ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE in edge_kinds
+        assert ek.SAML_HAS_ACCOUNT not in edge_kinds
+
+    def test_service_provider_emits_all_metadata_acs_routes(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        metadata = {
+            "sp": {
+                "entityId": "https://jamf.test/saml/metadata",
+                "assertionConsumerServices": [
+                    {"acsUrl": "https://jamf.test/saml/SSO", "index": "0", "isDefault": True},
+                    {"acsUrl": "https://jamf.test/saml/alternate", "index": "1", "isDefault": False},
+                ],
+            },
+            "idp": {"entityId": "http://www.okta.com/example-jamf-app"},
+            "errors": [],
+        }
+        service_provider = _make_saml_sso(
+            SAMLServiceProvider,
+            extra={"samlMetadata": metadata},
+        )
+
+        acs_edges = [
+            edge
+            for edge in service_provider.edges
+            if edge.kind == ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE
+        ]
+        assert len(acs_edges) == 2
 
 
 # ---------------------------------------------------------------------------

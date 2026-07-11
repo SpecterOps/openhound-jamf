@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 
 from duckdb import DuckDBPyConnection
@@ -17,6 +18,69 @@ class JamfLookup(LookupManager):
     @lru_cache
     def tenant_id(self):
         return self._find_single_object(f"SELECT id FROM {self.schema}.tenant")
+
+    @lru_cache
+    def _table_columns(self, table: str) -> frozenset[str]:
+        rows = self.client.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = ? AND table_name = ?
+            """,
+            [self.schema, table],
+        ).fetchall()
+        return frozenset(row[0] for row in rows)
+
+    @lru_cache
+    def users_by_email(self, email: str):
+        if "email" not in self._table_columns("user_details"):
+            return []
+        return self._find_all_objects(
+            f"""
+            SELECT id FROM {self.schema}.user_details
+            WHERE lower(trim(email)) = lower(trim(?))
+            """,
+            [email],
+        )
+
+    @lru_cache
+    def users_by_name(self, name: str):
+        columns = self._table_columns("user_details")
+        if not {"name", "full_name"}.issubset(columns):
+            return []
+        return self._find_all_objects(
+            f"""
+            SELECT id FROM {self.schema}.user_details
+            WHERE lower(trim(name)) = lower(trim(?))
+               OR lower(trim(full_name)) = lower(trim(?))
+            """,
+            [name, name],
+        )
+
+    @lru_cache
+    def user_has_computer_link(self, user_id: int | str, computer_id: str) -> bool:
+        columns = self._table_columns("user_details")
+        if "links" not in columns:
+            return False
+        row = self.client.execute(
+            f"SELECT links FROM {self.schema}.user_details WHERE id = ? LIMIT 1",
+            [user_id],
+        ).fetchone()
+        if not row or row[0] is None:
+            return False
+        links = row[0]
+        if isinstance(links, str):
+            try:
+                links = json.loads(links)
+            except json.JSONDecodeError:
+                return False
+        if not isinstance(links, dict):
+            return False
+        return any(
+            str(computer.get("id")) == str(computer_id)
+            for computer in links.get("computers", [])
+            if isinstance(computer, dict)
+        )
 
     @lru_cache
     def client_has_permission(self, client_id: int, privilege: str):

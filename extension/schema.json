@@ -205,7 +205,7 @@
     },
     {
       "name": "jamf_AssignedUser",
-      "description": "Represents the user assignment relationship on a jamf-managed computer.",
+      "description": "Represents the user assignment relationship on a Jamf-managed computer. Inspect match_type, confidence, evidence_source, and match_basis to distinguish native hard links from legacy-compatible USER_AND_LOCATION inference.",
       "is_traversable": true
     },
     {
