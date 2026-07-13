@@ -261,6 +261,17 @@ class TestSAMLNormalizedOutput:
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
         assert node.properties.route_key == "acs_url + sp_entity_id"
 
+    def test_normalized_saml_node_avoids_reserved_objectid_property(self):
+        from dataclasses import asdict
+
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        node = _make_saml_sso(SAMLServiceProvider).as_node
+        properties = asdict(node.properties)
+
+        assert "objectid" not in properties
+        assert properties["source_object_id"].startswith("jamf:")
+
     def test_unknown_account_state_is_not_treated_as_disabled(self):
         from openhound_jamf.kinds import edges as ek
         from openhound_jamf.models.sso import SAMLServiceProvider
