@@ -31,7 +31,7 @@ class SAMLNodeProperties(NodeProperties):
     """Normalized SAML node properties emitted from Jamf SSO evidence.
 
     Attributes:
-        objectid: Stable source object identifier used to derive the OpenGraph ID.
+        source_object_id: Stable source object identifier used to derive the OpenGraph ID.
         source_kind: Collector source that produced the SAML evidence.
         schema_contract_version: Normalized SAML contract version.
         enabled: Whether the Jamf SSO service provider is enabled.
@@ -46,7 +46,7 @@ class SAMLNodeProperties(NodeProperties):
         metadata_errors: Metadata retrieval or parsing failures retained for diagnostics.
     """
 
-    objectid: str
+    source_object_id: str
     source_kind: str
     schema_contract_version: str = "opengraph-saml-v0.2.2"
     enabled: bool | None = None
@@ -67,7 +67,7 @@ class SAMLNode(BaseNode):
     id: str = field(init=False)
 
     def __post_init__(self):
-        self.id = self.guid(self.properties.objectid, self.kinds[0])
+        self.id = self.guid(self.properties.source_object_id, self.kinds[0])
 
 
 @dataclass
@@ -433,7 +433,7 @@ class SAMLServiceProvider(SAMLSSOBase):
         if not self.service_provider_objectid:
             return None
         properties = SAMLNodeProperties(
-            objectid=self.service_provider_objectid,
+            source_object_id=self.service_provider_objectid,
             name=f"Jamf SAML SP {self.tenant_id}",
             displayname=f"Jamf SAML SP {self.tenant_id}",
             environmentid=self.tenant_node_id,
@@ -528,7 +528,7 @@ class SAMLIssuer(SAMLSSOBase):
         if not self.issuer_objectid or not self.issuer_entity_id:
             return None
         properties = SAMLNodeProperties(
-            objectid=self.issuer_objectid,
+            source_object_id=self.issuer_objectid,
             name=f"Trusted issuer {self.issuer_entity_id}",
             displayname=f"Trusted issuer {self.issuer_entity_id}",
             environmentid=self.tenant_node_id,
@@ -575,7 +575,7 @@ class SAMLAssertionConsumerService(SAMLSSOBase):
         if not objectid:
             return None
         properties = SAMLNodeProperties(
-            objectid=objectid,
+            source_object_id=objectid,
             name=f"Jamf ACS {acs.acs_url}",
             displayname=f"Jamf ACS {acs.acs_url}",
             environmentid=self.tenant_node_id,
