@@ -39,6 +39,8 @@ def preproc(ctx: PreProcContext):
         "tenant": "tenant",
         "sso": "sso",
         "saml_service_provider": "saml_service_provider",
+        "saml_account_resolution_rule": "saml_account_resolution_rule",
+        "saml_account_resolution_field": "saml_account_resolution_field",
         "saml_issuer": "saml_issuer",
         "saml_assertion_consumer_service": "saml_assertion_consumer_service",
     }

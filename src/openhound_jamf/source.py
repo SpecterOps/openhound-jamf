@@ -28,6 +28,8 @@ from .models import (
     Group,
     InventoryAssignedUser,
     Policy,
+    SAMLAccountResolutionField,
+    SAMLAccountResolutionRule,
     SAMLAssertionConsumerService,
     SAMLIssuer,
     SAMLServiceProvider,
@@ -396,6 +398,26 @@ def saml_service_provider(sso_config):
 
 
 @app.transformer(
+    name="saml_account_resolution_rule",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAccountResolutionRule,
+)
+def saml_account_resolution_rule(sso_config):
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_account_resolution_field",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAccountResolutionField,
+)
+def saml_account_resolution_field(sso_config):
+    yield sso_config
+
+
+@app.transformer(
     name="saml_issuer", data_from=sso, parallelized=True, columns=SAMLIssuer
 )
 def saml_issuer(sso_config):
@@ -535,6 +557,8 @@ def source(
         api_roles(ctx),
         sso_resource,
         sso_resource | saml_service_provider(),
+        sso_resource | saml_account_resolution_rule(),
+        sso_resource | saml_account_resolution_field(),
         sso_resource | saml_issuer(),
         sso_resource | saml_assertion_consumer_service(),
         tenant(credentials.host),
