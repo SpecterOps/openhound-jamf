@@ -16,6 +16,10 @@ from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
 
 
+SAML_CONTRACT_VERSION = "opengraph-saml-v0.3.0"
+ACCOUNT_RESOLUTION_PROFILE = "saml_account_resolution_v1"
+
+
 @dataclass
 class SSOProperties(JAMFNodeProperties):
     """JAMF SSO node properties"""
@@ -48,7 +52,7 @@ class SAMLNodeProperties(NodeProperties):
 
     source_object_id: str
     source_kind: str
-    schema_contract_version: str = "opengraph-saml-v0.2.2"
+    schema_contract_version: str = SAML_CONTRACT_VERSION
     enabled: bool | None = None
     native_object_id: str | None = None
     native_object_kind: str | None = None
@@ -59,6 +63,10 @@ class SAMLNodeProperties(NodeProperties):
     route_key: str | None = None
     comparison_mode: str | None = None
     metadata_errors: list[str] = field(default_factory=list)
+    expression_language: str | None = None
+    expression_profile: str | None = None
+    expression: str | None = None
+    summary: str | None = None
 
 
 @dataclass
@@ -87,6 +95,10 @@ class SAMLEdgeProperties(EdgeProperties):
     match_values: list[str] | None = None
     account_state: str | None = None
     mapping_attribute: str | None = None
+    schema_contract_version: str = SAML_CONTRACT_VERSION
+    email_match_values: list[str] | None = None
+    scoped_exact_match_values: list[str] | None = None
+    canonical_match_values: list[str] | None = None
 
 
 class ParsedAssertionConsumerService(BaseModel):
@@ -372,6 +384,66 @@ class SAMLSSOBase(JAMFAsset):
             return []
         return [str(value)]
 
+    @property
+    def account_resolution_rule_objectid(self) -> str | None:
+        mapping = self.match_mapping_attribute
+        if not self.service_provider_objectid or mapping not in {"email", "name"}:
+            return None
+        return f"{self.service_provider_objectid}:account-resolution:{mapping}"
+
+    @property
+    def account_resolution_rule_node_id(self) -> str | None:
+        if not self.account_resolution_rule_objectid:
+            return None
+        return SAMLNode.guid(
+            self.account_resolution_rule_objectid,
+            nk.SAML_ACCOUNT_RESOLUTION_RULE,
+        )
+
+    @property
+    def account_resolution_field_objectid(self) -> str | None:
+        if self.match_mapping_attribute != "name" or not self.service_provider_objectid:
+            return None
+        return f"{self.service_provider_objectid}:account-field:username"
+
+    @property
+    def account_resolution_field_node_id(self) -> str | None:
+        if not self.account_resolution_field_objectid:
+            return None
+        return SAMLNode.guid(
+            self.account_resolution_field_objectid,
+            nk.SAML_ACCOUNT_RESOLUTION_FIELD,
+        )
+
+    @property
+    def account_resolution_expression(self) -> str | None:
+        if self.match_mapping_attribute == "email":
+            return (
+                "assertion.scoped_exact_match_values.exists(value, value in "
+                "account.email_match_values)"
+            )
+        if self.match_mapping_attribute == "name":
+            return (
+                'account.fields.exists(field, field.name == "username" && '
+                "assertion.scoped_exact_match_values.exists(value, value in "
+                "field.match_values))"
+            )
+        return None
+
+    @property
+    def account_resolution_summary(self) -> str | None:
+        if self.match_mapping_attribute == "email":
+            return (
+                "Any assertion route-scoped exact value exactly matches an "
+                "account email value"
+            )
+        if self.match_mapping_attribute == "name":
+            return (
+                'Any assertion route-scoped exact value exactly matches account '
+                'field "username"'
+            )
+        return None
+
     @staticmethod
     def account_state(account) -> str:
         value = account.get("enabled")
@@ -424,6 +496,18 @@ class SAMLSSOBase(JAMFAsset):
             end=nk.ACCOUNT,
             kind=ek.SAML_HAS_ACCOUNT,
             description="The Jamf service provider can map SAML assertions to this existing Jamf account.",
+        ),
+        EdgeDef(
+            start=nk.SAML_SERVICE_PROVIDER,
+            end=nk.SAML_ACCOUNT_RESOLUTION_RULE,
+            kind=ek.SAML_HAS_ACCOUNT_RESOLUTION_RULE,
+            description="The Jamf service provider uses this account-resolution rule.",
+        ),
+        EdgeDef(
+            start=nk.ACCOUNT,
+            end=nk.SAML_ACCOUNT_RESOLUTION_FIELD,
+            kind=ek.SAML_HAS_ACCOUNT_RESOLUTION_VALUE,
+            description="A Jamf account supplies an exceptional resolution value.",
         ),
     ],
 )
@@ -494,6 +578,11 @@ class SAMLServiceProvider(SAMLSSOBase):
                 continue
 
             account_node_id = JAMFNode.guid(account_id, nk.ACCOUNT, self.tenant_id)
+            email_match_values = (
+                [value.casefold() for value in match_values]
+                if self.match_mapping_attribute == "email"
+                else None
+            )
             yield Edge(
                 kind=ek.SAML_HAS_ACCOUNT,
                 start=EdgePath(match_by="id", value=self.service_provider_node_id),
@@ -502,7 +591,30 @@ class SAMLServiceProvider(SAMLSSOBase):
                     match_values=match_values,
                     account_state=self.account_state(account),
                     mapping_attribute=self.match_mapping_attribute,
+                    email_match_values=email_match_values,
                 ),
+            )
+            if self.account_resolution_field_node_id:
+                yield Edge(
+                    kind=ek.SAML_HAS_ACCOUNT_RESOLUTION_VALUE,
+                    start=EdgePath(match_by="id", value=account_node_id),
+                    end=EdgePath(
+                        match_by="id", value=self.account_resolution_field_node_id
+                    ),
+                    properties=SAMLEdgeProperties(
+                        match_values=match_values,
+                        canonical_match_values=match_values,
+                    ),
+                )
+
+    @property
+    def _has_account_resolution_rule_edge(self):
+        if self.service_provider_node_id and self.account_resolution_rule_node_id:
+            yield Edge(
+                kind=ek.SAML_HAS_ACCOUNT_RESOLUTION_RULE,
+                start=EdgePath(match_by="id", value=self.service_provider_node_id),
+                end=EdgePath(match_by="id", value=self.account_resolution_rule_node_id),
+                properties=SAMLEdgeProperties(),
             )
 
     @property
@@ -510,7 +622,98 @@ class SAMLServiceProvider(SAMLSSOBase):
         yield from self._implements_edge
         yield from self._trusts_issuer_edge
         yield from self._has_acs_edge
+        yield from self._has_account_resolution_rule_edge
         yield from self._has_account_edges
+
+
+@app.asset(
+    description="Normalized Jamf SAML account-resolution rule.",
+    node=NodeDef(
+        kind=nk.SAML_ACCOUNT_RESOLUTION_RULE,
+        description="SAML account-resolution rule node",
+        icon="link",
+        properties=SAMLNodeProperties,
+    ),
+    edges=[
+        EdgeDef(
+            start=nk.SAML_ACCOUNT_RESOLUTION_RULE,
+            end=nk.SAML_ACCOUNT_RESOLUTION_FIELD,
+            kind=ek.SAML_USES_ACCOUNT_RESOLUTION_FIELD,
+            description="The rule reads this exceptional Jamf account field.",
+        )
+    ],
+)
+class SAMLAccountResolutionRule(SAMLSSOBase):
+    @property
+    def as_node(self):
+        if (
+            not self.account_resolution_rule_objectid
+            or not self.account_resolution_expression
+            or not self.account_resolution_summary
+        ):
+            return None
+        return SAMLNode(
+            kinds=[nk.SAML_ACCOUNT_RESOLUTION_RULE],
+            properties=SAMLNodeProperties(
+                source_object_id=self.account_resolution_rule_objectid,
+                name=f"Jamf {self.match_mapping_attribute} account resolution",
+                displayname=f"Jamf {self.match_mapping_attribute} account resolution",
+                environmentid=self.tenant_node_id,
+                source_kind="jamf",
+                native_object_id=self.native_sso_id,
+                native_object_kind=nk.SSO_INTEGRATION,
+                expression_language="cel",
+                expression_profile=ACCOUNT_RESOLUTION_PROFILE,
+                expression=self.account_resolution_expression,
+                summary=self.account_resolution_summary,
+            ),
+        )
+
+    @property
+    def edges(self):
+        if self.account_resolution_field_node_id:
+            yield Edge(
+                kind=ek.SAML_USES_ACCOUNT_RESOLUTION_FIELD,
+                start=EdgePath(
+                    match_by="id", value=self.account_resolution_rule_node_id
+                ),
+                end=EdgePath(
+                    match_by="id", value=self.account_resolution_field_node_id
+                ),
+                properties=SAMLEdgeProperties(),
+            )
+
+
+@app.asset(
+    description="Normalized exceptional Jamf SAML account field.",
+    node=NodeDef(
+        kind=nk.SAML_ACCOUNT_RESOLUTION_FIELD,
+        description="SAML account-resolution field node",
+        icon="tag",
+        properties=SAMLNodeProperties,
+    ),
+)
+class SAMLAccountResolutionField(SAMLSSOBase):
+    @property
+    def as_node(self):
+        if not self.account_resolution_field_objectid:
+            return None
+        return SAMLNode(
+            kinds=[nk.SAML_ACCOUNT_RESOLUTION_FIELD],
+            properties=SAMLNodeProperties(
+                source_object_id=self.account_resolution_field_objectid,
+                name="username",
+                displayname="Jamf account username",
+                environmentid=self.tenant_node_id,
+                source_kind="jamf",
+                native_object_id=self.native_sso_id,
+                native_object_kind=nk.SSO_INTEGRATION,
+            ),
+        )
+
+    @property
+    def edges(self):
+        return []
 
 
 @app.asset(

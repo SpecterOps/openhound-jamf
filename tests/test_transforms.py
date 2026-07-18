@@ -218,6 +218,7 @@ class TestSAMLNormalizedOutput:
         assert node.kinds == [nk.SAML_SERVICE_PROVIDER]
         assert node.properties.enabled is True
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
+        assert node.properties.schema_contract_version == "opengraph-saml-v0.3.0"
 
         emitted_edges = list(service_provider.edges)
         assert [edge.kind for edge in emitted_edges].count(ek.SAML_IMPLEMENTS) == 1
@@ -234,9 +235,85 @@ class TestSAMLNormalizedOutput:
         ]
         assert len(account_edges) == 2
         assert account_edges[0].properties.match_values == ["alice@example.com"]
+        assert account_edges[0].properties.email_match_values == [
+            "alice@example.com"
+        ]
         assert account_edges[0].properties.account_state == "enabled"
         assert account_edges[1].properties.match_values == ["bob@example.com"]
         assert account_edges[1].properties.account_state == "disabled"
+        assert all(
+            edge.properties.schema_contract_version == "opengraph-saml-v0.3.0"
+            for edge in emitted_edges
+        )
+
+        rule_edge = next(
+            edge
+            for edge in emitted_edges
+            if edge.kind == ek.SAML_HAS_ACCOUNT_RESOLUTION_RULE
+        )
+        assert rule_edge.start.value == service_provider.as_node.id
+
+    def test_email_mapping_emits_readable_v0_3_resolution_rule(self):
+        from openhound_jamf.models.sso import SAMLAccountResolutionRule
+
+        rule = _make_saml_sso(SAMLAccountResolutionRule)
+
+        assert rule.as_node.properties.expression_language == "cel"
+        assert (
+            rule.as_node.properties.expression_profile
+            == "saml_account_resolution_v1"
+        )
+        assert rule.as_node.properties.expression == (
+            "assertion.scoped_exact_match_values.exists(value, value in "
+            "account.email_match_values)"
+        )
+        assert rule.as_node.properties.summary == (
+            "Any assertion route-scoped exact value exactly matches an account "
+            "email value"
+        )
+
+    def test_username_mapping_uses_explicit_account_field_values(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import (
+            SAMLAccountResolutionField,
+            SAMLAccountResolutionRule,
+            SAMLServiceProvider,
+        )
+
+        lookup = _make_lookup()
+        lookup.all_account_saml_bindings.return_value = [
+            {"id": 1, "name": "alice", "enabled": "Enabled"}
+        ]
+        settings = {
+            "userMapping": "USERNAME",
+            "groupAttributeName": "group",
+            "groupRdnKey": " ",
+            "idpProviderType": "OKTA",
+            "idpUrl": "https://example.idp.test/metadata",
+            "entityId": "https://jamf.test/saml/metadata",
+            "metadataSource": "URL",
+        }
+        extra = {"samlSettings": settings}
+        service_provider = _make_saml_sso(
+            SAMLServiceProvider, extra=extra, lookup=lookup
+        )
+        rule = _make_saml_sso(SAMLAccountResolutionRule, extra=extra)
+        account_field = _make_saml_sso(SAMLAccountResolutionField, extra=extra)
+
+        assert account_field.as_node.properties.name == "username"
+        assert rule.as_node.properties.expression == (
+            'account.fields.exists(field, field.name == "username" && '
+            "assertion.scoped_exact_match_values.exists(value, value in "
+            "field.match_values))"
+        )
+        emitted_edges = list(service_provider.edges)
+        value_edge = next(
+            edge
+            for edge in emitted_edges
+            if edge.kind == ek.SAML_HAS_ACCOUNT_RESOLUTION_VALUE
+        )
+        assert value_edge.properties.match_values == ["alice"]
+        assert value_edge.properties.canonical_match_values == ["alice"]
 
     def test_issuer_node_preserves_exact_trusted_entity_id(self):
         from openhound_jamf.kinds import nodes as nk
