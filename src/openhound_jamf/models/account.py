@@ -261,7 +261,7 @@ class Account(JAMFAsset):
             privilege_settings=self.privileges.jss_settings if self.privileges else [],
             environmentid=self.tenant_node_id,
             privilege_set=self.privilege_set,
-            local_account=self.directory_user,
+            local_account=not self.directory_user,
         )
         return JAMFNode(kinds=[nk.ACCOUNT], properties=properties)
 
@@ -299,6 +299,9 @@ class Account(JAMFAsset):
 
     @property
     def _az_matched_email_edges(self):
+        # TODO(openhound_saml): Email is not globally unique across Entra tenants.
+        # Preserve this non-traversable correlation edge until Jamf can provide
+        # authoritative tenant scope across SAML, OIDC, and Cloud IdP sources.
         if self.email_address:
             match_by = PropertyMatch(key="email", value=self.email_address)
             yield Edge(
