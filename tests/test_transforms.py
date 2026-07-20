@@ -82,6 +82,16 @@ class TestAccountSiteCoercion:
         assert account.site.id == 42
 
 
+class TestAccountDirectoryBacking:
+    def test_directory_user_is_not_emitted_as_local_account(self):
+        account = _make_account({"directory_user": True})
+        assert account.as_node.properties.local_account is False
+
+    def test_non_directory_user_is_emitted_as_local_account(self):
+        account = _make_account({"directory_user": False})
+        assert account.as_node.properties.local_account is True
+
+
 # ---------------------------------------------------------------------------
 # Model-level site coercion — Group
 # ---------------------------------------------------------------------------
