@@ -30,7 +30,7 @@ class JAMFNode(BaseNode):
         node_type: str,
         tenant: str,
     ) -> str:
-        return BaseNode.guid(id, node_type, tenant)
+        return BaseNode.guid(id, node_type, tenant).upper()
 
     def __post_init__(self):
         self.id = self.guid(
