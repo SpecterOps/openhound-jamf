@@ -199,3 +199,25 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
     assert "SAML_TrustsIssuer" in edge_kinds
     assert "SAML_HasAssertionConsumerService" in edge_kinds
     assert "SAML_HasAccount" in edge_kinds
+
+    email_rule = next(
+        node
+        for node in graph_nodes
+        if "SAML_AccountResolutionRule" in node["kinds"]
+    )
+    assert email_rule["properties"]["expression"] == (
+        "assertion.email_match_values.exists(value, value in "
+        "account.email_match_values)"
+    )
+    assert email_rule["properties"]["summary"] == (
+        "Any assertion email value exactly matches an account email value"
+    )
+
+    account_edge = next(
+        edge for edge in graph_edges if edge["kind"] == "SAML_HasAccount"
+    )
+    assert account_edge["start"]["match_by"] == "id"
+    assert account_edge["end"]["match_by"] == "id"
+    assert account_edge["properties"]["email_match_values"] == [
+        "john.smith@company.com"
+    ]

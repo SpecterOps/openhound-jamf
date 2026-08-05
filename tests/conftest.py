@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi import Request
+from httpx import ASGITransport, AsyncClient
 from requests import PreparedRequest, Response
 from requests.hooks import dispatch_hook
 from requests.structures import CaseInsensitiveDict
@@ -50,7 +53,6 @@ def _page_payload(relative_path: str, page: int | None):
 @pytest.fixture
 def mock_jamf_api() -> Any:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     app = FastAPI()
     app.state.calls = []
@@ -161,7 +163,7 @@ def mock_jamf_api() -> Any:
         app.state.calls.append("api_roles")
         return _page_payload("v1/api-roles.json", page)
 
-    return TestClient(app)
+    return SimpleNamespace(app=app)
 
 
 @pytest.fixture
@@ -170,24 +172,32 @@ def mock_dlt_requests(monkeypatch, mock_jamf_api):
     from dlt.sources.helpers.requests.session import Session as DltSession
 
     def mock_send(self, request: PreparedRequest, **kwargs: Any) -> Response:
-        parsed = urlsplit(request.url)
+        parsed = urlsplit(request.url or "")
         path = parsed.path
         if parsed.query:
             path = f"{path}?{parsed.query}"
 
-        response = mock_jamf_api.request(
-            method=request.method,
-            url=path,
-            headers=dict(request.headers),
-            content=request.body,
-        )
+        async def send_to_app():
+            transport = ASGITransport(app=mock_jamf_api.app)
+            async with AsyncClient(
+                transport=transport,
+                base_url="https://jamf.test",
+            ) as client:
+                return await client.request(
+                    method=request.method,
+                    url=path,
+                    headers=dict(request.headers),
+                    content=request.body,
+                )
+
+        response = asyncio.run(send_to_app())
         requests_response = Response()
         requests_response.status_code = response.status_code
         requests_response._content = response.content
         requests_response.headers = CaseInsensitiveDict(response.headers)
         requests_response.encoding = response.encoding or "utf-8"
         requests_response.reason = response.reason_phrase
-        requests_response.url = request.url
+        requests_response.url = request.url or ""
         requests_response.request = request
         return dispatch_hook("response", request.hooks, requests_response, **kwargs)
 
