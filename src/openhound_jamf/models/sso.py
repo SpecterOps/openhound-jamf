@@ -419,7 +419,7 @@ class SAMLSSOBase(JAMFAsset):
     def account_resolution_expression(self) -> str | None:
         if self.match_mapping_attribute == "email":
             return (
-                "assertion.scoped_exact_match_values.exists(value, value in "
+                "assertion.email_match_values.exists(value, value in "
                 "account.email_match_values)"
             )
         if self.match_mapping_attribute == "name":
@@ -434,8 +434,7 @@ class SAMLSSOBase(JAMFAsset):
     def account_resolution_summary(self) -> str | None:
         if self.match_mapping_attribute == "email":
             return (
-                "Any assertion route-scoped exact value exactly matches an "
-                "account email value"
+                "Any assertion email value exactly matches an account email value"
             )
         if self.match_mapping_attribute == "name":
             return (

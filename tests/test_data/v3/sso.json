@@ -9,7 +9,7 @@
     "tokenExpirationDisabled": false,
     "userAttributeEnabled": false,
     "userAttributeName": " ",
-    "userMapping": "USERNAME",
+    "userMapping": "EMAIL",
     "groupAttributeName": "http://schemas.xmlsoap.org/claims/Group",
     "groupRdnKey": " ",
     "idpProviderType": "ADFS",

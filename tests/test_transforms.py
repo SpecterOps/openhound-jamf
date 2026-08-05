@@ -274,12 +274,11 @@ class TestSAMLNormalizedOutput:
             == "saml_account_resolution_v1"
         )
         assert rule.as_node.properties.expression == (
-            "assertion.scoped_exact_match_values.exists(value, value in "
+            "assertion.email_match_values.exists(value, value in "
             "account.email_match_values)"
         )
         assert rule.as_node.properties.summary == (
-            "Any assertion route-scoped exact value exactly matches an account "
-            "email value"
+            "Any assertion email value exactly matches an account email value"
         )
 
     def test_username_mapping_uses_explicit_account_field_values(self):
