@@ -18,6 +18,9 @@ class JAMFNodeProperties(BaseProperties):
     tier: int
     environmentid: str
 
+    def __post_init__(self):
+        self.name = self.name.upper()
+
 
 @dataclass
 class JAMFNode(BaseNode):
