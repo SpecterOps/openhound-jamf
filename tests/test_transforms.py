@@ -24,6 +24,19 @@ def _make_lookup(tenant: str = "test-tenant"):
     return lookup
 
 
+def _assert_entity_panel_queries(node):
+    from openhound_jamf.saml_entity_panel_queries import (
+        ENTITY_PANEL_QUERY_VERSION,
+        cypher_string_literal,
+        node_entity_panel_queries,
+    )
+
+    assert node.properties.entity_panel_query_version == (ENTITY_PANEL_QUERY_VERSION)
+    for key, value in node_entity_panel_queries(node.kinds[0], node.id).items():
+        assert getattr(node.properties, key) == value
+    assert cypher_string_literal("id'\\\n東京") == "'id\\'\\\\\\n東京'"
+
+
 def _make_account(extra: dict | None = None, lookup=None):
     from openhound_jamf.models.account import Account
 
@@ -280,6 +293,7 @@ class TestSAMLNormalizedOutput:
         assert rule.as_node.properties.summary == (
             "Any assertion email value exactly matches an account email value"
         )
+        _assert_entity_panel_queries(rule.as_node)
 
     def test_username_mapping_uses_explicit_account_field_values(self):
         from openhound_jamf.kinds import edges as ek
@@ -310,6 +324,8 @@ class TestSAMLNormalizedOutput:
         account_field = _make_saml_sso(SAMLAccountResolutionField, extra=extra)
 
         assert account_field.as_node.properties.name == "username"
+        _assert_entity_panel_queries(rule.as_node)
+        _assert_entity_panel_queries(account_field.as_node)
         assert rule.as_node.properties.expression == (
             'account.fields.exists(field, field.name == "username" && '
             "assertion.scoped_exact_match_values.exists(value, value in "
@@ -334,6 +350,7 @@ class TestSAMLNormalizedOutput:
         assert node.kinds == [nk.SAML_ISSUER]
         assert node.properties.entity_id == "http://www.okta.com/example-jamf-app"
         assert node.properties.comparison_mode == "exact_trimmed"
+        _assert_entity_panel_queries(node)
 
     def test_acs_node_preserves_exact_route_key(self):
         from openhound_jamf.kinds import nodes as nk
@@ -346,6 +363,7 @@ class TestSAMLNormalizedOutput:
         assert node.properties.acs_url == "https://jamf.test/saml/SSO"
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
         assert node.properties.route_key == "acs_url + sp_entity_id"
+        _assert_entity_panel_queries(node)
 
     def test_normalized_saml_node_avoids_reserved_objectid_property(self):
         from dataclasses import asdict

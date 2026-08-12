@@ -14,6 +14,10 @@ from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+from openhound_jamf.saml_entity_panel_queries import (
+    ENTITY_PANEL_QUERY_VERSION,
+    node_entity_panel_queries,
+)
 
 
 SAML_CONTRACT_VERSION = "opengraph-saml-v0.3.0"
@@ -48,6 +52,12 @@ class SAMLNodeProperties(NodeProperties):
         route_key: Description of the route fields used for correlation.
         comparison_mode: Matching behavior required for issuer correlation.
         metadata_errors: Metadata retrieval or parsing failures retained for diagnostics.
+        entity_panel_query_version: Entity-panel query contract version.
+        query_federation_providers: Query for federation providers using this evidence.
+        query_service_providers: Query for service providers using this evidence.
+        query_service_provider: Query for the owning service provider.
+        query_account_resolution_rule: Query for the rule using this field.
+        query_accounts: Query for accounts supplying values for this field.
     """
 
     source_object_id: str
@@ -67,6 +77,12 @@ class SAMLNodeProperties(NodeProperties):
     expression_profile: str | None = None
     expression: str | None = None
     summary: str | None = None
+    entity_panel_query_version: str | None = None
+    query_federation_providers: str | None = None
+    query_service_providers: str | None = None
+    query_service_provider: str | None = None
+    query_account_resolution_rule: str | None = None
+    query_accounts: str | None = None
 
 
 @dataclass
@@ -665,6 +681,11 @@ class SAMLAccountResolutionRule(SAMLSSOBase):
                 expression_profile=ACCOUNT_RESOLUTION_PROFILE,
                 expression=self.account_resolution_expression,
                 summary=self.account_resolution_summary,
+                entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
+                **node_entity_panel_queries(
+                    nk.SAML_ACCOUNT_RESOLUTION_RULE,
+                    self.account_resolution_rule_node_id,
+                ),
             ),
         )
 
@@ -707,6 +728,11 @@ class SAMLAccountResolutionField(SAMLSSOBase):
                 source_kind="jamf",
                 native_object_id=self.native_sso_id,
                 native_object_kind=nk.SSO_INTEGRATION,
+                entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
+                **node_entity_panel_queries(
+                    nk.SAML_ACCOUNT_RESOLUTION_FIELD,
+                    self.account_resolution_field_node_id,
+                ),
             ),
         )
 
@@ -739,6 +765,8 @@ class SAMLIssuer(SAMLSSOBase):
             issuer=self.issuer_entity_id,
             comparison_mode="exact_trimmed",
             metadata_errors=self.metadata_errors,
+            entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
+            **node_entity_panel_queries(nk.SAML_ISSUER, self.issuer_node_id),
         )
         return SAMLNode(kinds=[nk.SAML_ISSUER], properties=properties)
 
@@ -786,6 +814,11 @@ class SAMLAssertionConsumerService(SAMLSSOBase):
             sp_entity_id=self.sp_entity_id,
             route_key="acs_url + sp_entity_id",
             metadata_errors=self.metadata_errors,
+            entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
+            **node_entity_panel_queries(
+                nk.SAML_ASSERTION_CONSUMER_SERVICE,
+                self.acs_node_id_for(acs.acs_url),
+            ),
         )
         return SAMLNode(
             kinds=[nk.SAML_ASSERTION_CONSUMER_SERVICE], properties=properties
