@@ -14,6 +14,7 @@ API_ROLE = "jamf_ApiRole"  # Not an explicit node in collection data
 SSO_INTEGRATION = "jamf_SSOIntegration"
 
 SAML_SERVICE_PROVIDER = "SAML_ServiceProvider"
+SAML_FEDERATION_PROVIDER = "SAML_FederationProvider"
 SAML_ISSUER = "SAML_Issuer"
 SAML_ASSERTION_CONSUMER_SERVICE = "SAML_AssertionConsumerService"
 SAML_ACCOUNT_RESOLUTION_RULE = "SAML_AccountResolutionRule"
