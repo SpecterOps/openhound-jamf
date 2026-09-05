@@ -324,6 +324,7 @@ class TestSAMLNormalizedOutput:
         account_field = _make_saml_sso(SAMLAccountResolutionField, extra=extra)
 
         assert account_field.as_node.properties.name == "username"
+        assert account_field.as_node.properties.account_field_name == "username"
         _assert_entity_panel_queries(rule.as_node)
         _assert_entity_panel_queries(account_field.as_node)
         assert rule.as_node.properties.expression == (
@@ -339,6 +340,37 @@ class TestSAMLNormalizedOutput:
         )
         assert value_edge.properties.match_values == ["alice"]
         assert value_edge.properties.canonical_match_values == ["alice"]
+
+    def test_account_mapping_ignores_blank_values_and_normalizes_email_evidence(self):
+        from openhound_jamf.kinds import edges as ek
+        from openhound_jamf.models.sso import SAMLServiceProvider
+
+        lookup = _make_lookup()
+        lookup.all_account_saml_bindings.return_value = [
+            {"id": 1, "name": "blank", "email": "   ", "enabled": "Enabled"},
+            {
+                "id": 2,
+                "name": "alice",
+                "email": " Alice@Example.com ",
+                "enabled": "Enabled",
+            },
+        ]
+
+        service_provider = _make_saml_sso(SAMLServiceProvider, lookup=lookup)
+
+        account_edges = [
+            edge
+            for edge in service_provider.edges
+            if edge.kind == ek.SAML_HAS_ACCOUNT
+        ]
+
+        assert len(account_edges) == 1
+        assert account_edges[0].properties.match_values == [
+            " Alice@Example.com "
+        ]
+        assert account_edges[0].properties.email_match_values == [
+            "alice@example.com"
+        ]
 
     def test_issuer_node_preserves_exact_trusted_entity_id(self):
         from openhound_jamf.kinds import nodes as nk
