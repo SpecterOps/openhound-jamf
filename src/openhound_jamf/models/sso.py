@@ -45,6 +45,8 @@ class SAMLNodeProperties(NodeProperties):
         enabled: Whether the Jamf SSO service provider is enabled.
         native_object_id: Identifier of the native Jamf SSO integration.
         native_object_kind: OpenGraph kind of the native Jamf SSO integration.
+        account_field_name: Source-exact SP-local account field name when this
+            node represents an exceptional account-resolution field.
         sp_entity_id: Service-provider entity ID associated with this SAML route.
         entity_id: SAML entity ID for a service provider or trusted issuer.
         issuer: Trusted upstream SAML issuer entity ID.
@@ -66,6 +68,7 @@ class SAMLNodeProperties(NodeProperties):
     enabled: bool | None = None
     native_object_id: str | None = None
     native_object_kind: str | None = None
+    account_field_name: str | None = None
     sp_entity_id: str | None = None
     entity_id: str | None = None
     issuer: str | None = None
@@ -396,9 +399,12 @@ class SAMLSSOBase(JAMFAsset):
         if not mapping:
             return []
         value = account.get(mapping)
-        if not value:
+        if value is None:
             return []
-        return [str(value)]
+        source_value = str(value)
+        if not source_value.strip():
+            return []
+        return [source_value]
 
     @property
     def account_resolution_rule_objectid(self) -> str | None:
@@ -594,7 +600,7 @@ class SAMLServiceProvider(SAMLSSOBase):
 
             account_node_id = JAMFNode.guid(account_id, nk.ACCOUNT, self.tenant_id)
             email_match_values = (
-                [value.casefold() for value in match_values]
+                [value.strip().casefold() for value in match_values]
                 if self.match_mapping_attribute == "email"
                 else None
             )
@@ -726,6 +732,7 @@ class SAMLAccountResolutionField(SAMLSSOBase):
                 displayname="Jamf account username",
                 environmentid=self.tenant_node_id,
                 source_kind="jamf",
+                account_field_name="username",
                 native_object_id=self.native_sso_id,
                 native_object_kind=nk.SSO_INTEGRATION,
                 entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
