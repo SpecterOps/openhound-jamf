@@ -67,7 +67,9 @@ PREPROC_RESOURCES = {
 }
 
 
-def _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls):
+def _run_collect_and_assert(
+    tmp_path, mock_jamf_api, credentials, expected_calls, allowed_idp_origins=None
+):
     import os
 
     os.environ["DLT_DATA_DIR"] = str(tmp_path / "dlt")
@@ -78,7 +80,12 @@ def _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls
     from openhound_jamf.source import source as source_module
 
     collector = Collector(name="jamf", output_path=tmp_path / "output")
-    load_info = collector.run(source_module(credentials=credentials))
+    load_info = collector.run(
+        source_module(
+            credentials=credentials,
+            saml_metadata_allowed_origins=allowed_idp_origins,
+        )
+    )
 
     assert load_info.loads_ids
     assert not load_info.has_failed_jobs
@@ -111,6 +118,26 @@ def test_collect_pipeline_runs_successfully(tmp_path, mock_jamf_api):
 
     expected_calls = BASE_EXPECTED_CALLS + Counter({"auth_token": 1})
 
+    _run_collect_and_assert(
+        tmp_path,
+        mock_jamf_api,
+        credentials,
+        expected_calls,
+        allowed_idp_origins="https://example.idp.com",
+    )
+
+
+def test_collect_skips_external_idp_without_allowlist(tmp_path, mock_jamf_api):
+    from openhound_jamf.auth import JamfPasswordCredentials
+
+    credentials = JamfPasswordCredentials(
+        host="https://jamf.test",
+        username="jamf-user",
+        password="jamf-pass",
+    )
+    expected_calls = BASE_EXPECTED_CALLS - Counter({"okta_idp_metadata": 1})
+    expected_calls += Counter({"auth_token": 1})
+
     _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls)
 
 
@@ -128,7 +155,13 @@ def test_collect_pipeline_runs_successfully_with_client_credentials_auth(
 
     expected_calls = BASE_EXPECTED_CALLS + Counter({"oauth_token": 1})
 
-    _run_collect_and_assert(tmp_path, mock_jamf_api, credentials, expected_calls)
+    _run_collect_and_assert(
+        tmp_path,
+        mock_jamf_api,
+        credentials,
+        expected_calls,
+        allowed_idp_origins="https://example.idp.com",
+    )
 
 
 def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
@@ -156,7 +189,12 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
 
     collect_root = tmp_path / "output"
     collector = Collector(name="jamf", output_path=collect_root)
-    collector.run(source_module(credentials=credentials))
+    collector.run(
+        source_module(
+            credentials=credentials,
+            saml_metadata_allowed_origins="https://example.idp.com",
+        )
+    )
 
     lookup_file = tmp_path / "lookup.duckdb"
     preprocessor = PreProcessor(
@@ -178,7 +216,14 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
             source_kind="jamf",
             progress=Progress.log,
         )
-        converter.run(source_module(credentials=credentials), app.assets, {})
+        converter.run(
+            source_module(
+                credentials=credentials,
+                saml_metadata_allowed_origins="https://example.idp.com",
+            ),
+            app.assets,
+            {},
+        )
     finally:
         con.close()
 
@@ -201,9 +246,7 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
     assert "SAML_HasAccount" in edge_kinds
 
     email_rule = next(
-        node
-        for node in graph_nodes
-        if "SAML_AccountResolutionRule" in node["kinds"]
+        node for node in graph_nodes if "SAML_AccountResolutionRule" in node["kinds"]
     )
     assert email_rule["properties"]["expression"] == (
         "assertion.email_match_values.exists(value, value in "

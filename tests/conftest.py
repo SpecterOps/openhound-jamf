@@ -194,6 +194,7 @@ def mock_dlt_requests(monkeypatch, mock_jamf_api):
         requests_response = Response()
         requests_response.status_code = response.status_code
         requests_response._content = response.content
+        requests_response._content_consumed = True
         requests_response.headers = CaseInsensitiveDict(response.headers)
         requests_response.encoding = response.encoding or "utf-8"
         requests_response.reason = response.reason_phrase

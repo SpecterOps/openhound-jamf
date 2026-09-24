@@ -298,7 +298,11 @@ class Group(JAMFAsset):
 
     @property
     def _admin_to_site_edges(self):
-        if self.access_level == "Site Access" and self.privilege_set == "Administrator" and self.site.id != NO_SITE_ID:
+        if (
+            self.access_level == "Site Access"
+            and self.privilege_set == "Administrator"
+            and self.site.id != NO_SITE_ID
+        ):
             site_node_id = JAMFNode.guid(str(self.site.id), nk.SITE, self.tenant_id)
             yield Edge(
                 kind=ek.ADMIN_TO_SITE,

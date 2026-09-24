@@ -290,12 +290,18 @@ class SAMLSSOBase(JAMFAsset):
 
     @property
     def is_saml(self) -> bool:
-        return self.configuration_type.upper() == "SAML" and self.saml_settings is not None
+        return (
+            self.configuration_type.upper() == "SAML" and self.saml_settings is not None
+        )
 
     @property
     def sp_entity_id(self) -> str | None:
-        if self.saml_metadata and self.saml_metadata.sp:
-            return self.saml_metadata.sp.entity_id or self.saml_settings.entity_id
+        if (
+            self.saml_metadata
+            and self.saml_metadata.sp
+            and self.saml_metadata.sp.entity_id
+        ):
+            return self.saml_metadata.sp.entity_id
         if self.saml_settings:
             return self.saml_settings.entity_id
         return None
@@ -455,12 +461,10 @@ class SAMLSSOBase(JAMFAsset):
     @property
     def account_resolution_summary(self) -> str | None:
         if self.match_mapping_attribute == "email":
-            return (
-                "Any assertion email value exactly matches an account email value"
-            )
+            return "Any assertion email value exactly matches an account email value"
         if self.match_mapping_attribute == "name":
             return (
-                'Any assertion route-scoped exact value exactly matches account '
+                "Any assertion route-scoped exact value exactly matches account "
                 'field "username"'
             )
         return None
