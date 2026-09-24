@@ -186,22 +186,40 @@ class InventoryAssignedUser(JAMFAsset):
     email: str | None = None
     phone: str | None = None
 
+    @staticmethod
+    def _nonblank(value: str | None) -> str | None:
+        normalized = value.strip() if value is not None else ""
+        return normalized or None
+
+    @property
+    def _identity(self) -> tuple[str, str] | None:
+        for identity_field, value in (
+            ("email", self.email),
+            ("username", self.username),
+            ("realname", self.realname),
+        ):
+            if normalized := self._nonblank(value):
+                return identity_field, normalized
+        return None
+
     @property
     def _match(self) -> tuple[int | str, str, str] | None:
-        if self.email:
-            matches = self._lookup.users_by_email(self.email.strip())
+        if email := self._nonblank(self.email):
+            matches = self._lookup.users_by_email(email)
             if len(matches) == 1:
                 return matches[0][0], "email", "medium"
-        if self.username:
-            matches = self._lookup.users_by_name(self.username.strip())
+        if username := self._nonblank(self.username):
+            matches = self._lookup.users_by_name(username)
             if len(matches) == 1:
                 return matches[0][0], "username", "low"
         return None
 
     @property
     def _synthetic_id(self) -> str:
-        identity = (self.email or self.username or self.realname or self.computer_id)
-        return f"inventory:{identity.strip().casefold()}"
+        identity = self._identity
+        if identity is None:
+            raise ValueError("inventory user has no usable identity")
+        return f"inventory:{identity[1].casefold()}"
 
     @property
     def _target_raw_id(self) -> int | str:
@@ -214,19 +232,26 @@ class InventoryAssignedUser(JAMFAsset):
 
     @property
     def as_node(self):
-        if self._match:
+        identity = self._identity
+        if identity is None or self._match:
             return None
-        name = self.username or self.email or self.realname or self._synthetic_id
+        name = (
+            self._nonblank(self.username)
+            or self._nonblank(self.email)
+            or self._nonblank(self.realname)
+            or identity[1]
+        )
+        realname = self._nonblank(self.realname)
         return JAMFNode(
             kinds=[nk.USER],
             properties=UserProperties(
                 id=self._synthetic_id,
                 name=name,
-                displayname=self.realname or name,
+                displayname=realname or name,
                 tenant=self.tenant_id,
-                email=self.email,
+                email=self._nonblank(self.email),
                 phone_number=self.phone or "",
-                full_name=self.realname or name,
+                full_name=realname or name,
                 tier=1,
                 environmentid=self.tenant_node_id,
             ),
@@ -234,10 +259,11 @@ class InventoryAssignedUser(JAMFAsset):
 
     @property
     def edges(self):
+        identity = self._identity
+        if identity is None:
+            return
         match = self._match
-        if match and self._lookup.user_has_computer_link(
-            match[0], self.computer_id
-        ):
+        if match and self._lookup.user_has_computer_link(match[0], self.computer_id):
             return
 
         if match:
@@ -248,7 +274,7 @@ class InventoryAssignedUser(JAMFAsset):
                 "no native user/computer link was present."
             )
         else:
-            match_basis = "inventory_email" if self.email else "inventory_username"
+            match_basis = f"inventory_{identity[0]}"
             confidence = "low"
             reason = (
                 "Legacy-compatible inference: Jamf computer inventory "

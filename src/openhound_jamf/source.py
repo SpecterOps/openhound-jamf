@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Union
+from typing import NotRequired, TypedDict, Union
 from xml.etree import ElementTree
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import dlt
 from dlt.sources.helpers import requests
@@ -44,15 +44,92 @@ from .models import (
 class SourceContext:
     client: RESTClient
     base_url: str
+    allowed_idp_origins: frozenset[tuple[str, str, int]]
 
 
 SAML_METADATA_NS = {"md": "urn:oasis:names:tc:SAML:2.0:metadata"}
+MAX_SAML_METADATA_BYTES = 2 * 1024 * 1024
+MAX_SAML_METADATA_REDIRECTS = 3
+MetadataOrigin = tuple[str, str, int]
+
+
+class SAMLACSEntry(TypedDict):
+    acsUrl: str
+    acsBinding: str | None
+    index: str | None
+    isDefault: bool
+
+
+class SAMLMetadata(TypedDict):
+    entityId: str | None
+    acsUrl: NotRequired[str | None]
+    acsBinding: NotRequired[str | None]
+    assertionConsumerServices: NotRequired[list[SAMLACSEntry]]
+    nameIdFormats: NotRequired[list[str]]
+    ssoUrl: NotRequired[str | None]
+    ssoBinding: NotRequired[str | None]
+
+
+class EnrichedSAMLMetadata(TypedDict):
+    errors: list[str]
+    sp: NotRequired[SAMLMetadata]
+    idp: NotRequired[SAMLMetadata]
+
+
+def _metadata_origin(url: str) -> MetadataOrigin | None:
+    if any(char.isspace() or ord(char) < 32 or char == "\\" for char in url):
+        return None
+    try:
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            return None
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme == "https" else 80
+        if port == 0:
+            return None
+    except ValueError:
+        return None
+    return parsed.scheme, parsed.hostname, port
+
+
+def _parse_allowed_idp_origins(value: str | None) -> frozenset[MetadataOrigin]:
+    if not value:
+        return frozenset()
+    origins: set[MetadataOrigin] = set()
+    for item in value.split(","):
+        candidate = item.strip()
+        try:
+            parsed = urlsplit(candidate)
+        except ValueError as exc:
+            raise ValueError(
+                "SAML metadata allowlist entries must be HTTPS origins"
+            ) from exc
+        origin = _metadata_origin(candidate)
+        if (
+            origin is None
+            or origin[0] != "https"
+            or parsed.path not in {"", "/"}
+            or parsed.query
+        ):
+            raise ValueError("SAML metadata allowlist entries must be HTTPS origins")
+        origins.add(origin)
+    return frozenset(origins)
 
 
 def _resolve_url(base_url: str, value: str | None) -> str | None:
     if not value or not value.strip():
         return None
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
     if parsed.scheme and parsed.netloc:
         return value
 
@@ -69,10 +146,10 @@ def _text_values(element: ElementTree.Element, path: str) -> list[str]:
     ]
 
 
-def _parse_saml_metadata(xml_text: str) -> dict:
+def _parse_saml_metadata(xml_text: str | bytes) -> SAMLMetadata:
     root = ElementTree.fromstring(xml_text)
     entity_id = root.attrib.get("entityID")
-    metadata = {"entityId": entity_id}
+    metadata: SAMLMetadata = {"entityId": entity_id}
 
     sp_descriptor = root.find("md:SPSSODescriptor", SAML_METADATA_NS)
     if sp_descriptor is not None:
@@ -80,12 +157,16 @@ def _parse_saml_metadata(xml_text: str) -> dict:
             "md:AssertionConsumerService", SAML_METADATA_NS
         )
         default_service = next(
-            (service for service in services if service.attrib.get("isDefault") == "true"),
+            (
+                service
+                for service in services
+                if service.attrib.get("isDefault") == "true"
+            ),
             services[0] if services else None,
         )
-        assertion_consumer_services = [
+        assertion_consumer_services: list[SAMLACSEntry] = [
             {
-                "acsUrl": service.attrib.get("Location"),
+                "acsUrl": service.attrib["Location"],
                 "acsBinding": service.attrib.get("Binding"),
                 "index": service.attrib.get("index"),
                 "isDefault": service.attrib.get("isDefault") == "true",
@@ -93,26 +174,19 @@ def _parse_saml_metadata(xml_text: str) -> dict:
             for service in services
             if service.attrib.get("Location")
         ]
-        metadata.update(
-            {
-                # Keep the preferred endpoint for backwards-compatible raw output,
-                # while retaining every route needed for SAML normalization.
-                "acsUrl": (
-                    default_service.attrib.get("Location")
-                    if default_service is not None
-                    else None
-                ),
-                "acsBinding": (
-                    default_service.attrib.get("Binding")
-                    if default_service is not None
-                    else None
-                ),
-                "assertionConsumerServices": assertion_consumer_services,
-                "nameIdFormats": _text_values(
-                    sp_descriptor, "md:NameIDFormat"
-                ),
-            }
+        # Keep the preferred endpoint for backwards-compatible raw output.
+        metadata["acsUrl"] = (
+            default_service.attrib.get("Location")
+            if default_service is not None
+            else None
         )
+        metadata["acsBinding"] = (
+            default_service.attrib.get("Binding")
+            if default_service is not None
+            else None
+        )
+        metadata["assertionConsumerServices"] = assertion_consumer_services
+        metadata["nameIdFormats"] = _text_values(sp_descriptor, "md:NameIDFormat")
 
     idp_descriptor = root.find("md:IDPSSODescriptor", SAML_METADATA_NS)
     if idp_descriptor is not None:
@@ -125,54 +199,102 @@ def _parse_saml_metadata(xml_text: str) -> dict:
             ),
             services[0] if services else None,
         )
-        metadata.update(
-            {
-                "ssoUrl": (
-                    post_service.attrib.get("Location")
-                    if post_service is not None
-                    else None
-                ),
-                "ssoBinding": (
-                    post_service.attrib.get("Binding")
-                    if post_service is not None
-                    else None
-                ),
-                "nameIdFormats": _text_values(
-                    idp_descriptor, "md:NameIDFormat"
-                ),
-            }
+        metadata["ssoUrl"] = (
+            post_service.attrib.get("Location") if post_service is not None else None
         )
+        metadata["ssoBinding"] = (
+            post_service.attrib.get("Binding") if post_service is not None else None
+        )
+        metadata["nameIdFormats"] = _text_values(idp_descriptor, "md:NameIDFormat")
 
     return metadata
 
 
-def _fetch_saml_metadata(url: str | None) -> tuple[dict | None, str | None]:
+def _fetch_saml_metadata(
+    url: str | None, allowed_origins: frozenset[MetadataOrigin]
+) -> tuple[SAMLMetadata | None, str | None]:
     if not url:
         return None, "metadata URL is empty"
-    try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        return _parse_saml_metadata(response.text), None
-    except Exception as exc:  # pragma: no cover - exercised by integration runs.
-        return None, f"{url}: {exc}"
+    current_url = url
+    # Validate every hop before requesting it; an access gateway may redirect
+    # metadata requests to a different origin.
+    for redirect_count in range(MAX_SAML_METADATA_REDIRECTS + 1):
+        if _metadata_origin(current_url) not in allowed_origins:
+            return None, (
+                "metadata URL is not allowed"
+                if redirect_count == 0
+                else "metadata redirect is not allowed"
+            )
+        try:
+            response = requests.get(
+                current_url, timeout=(5, 30), stream=True, allow_redirects=False
+            )
+            try:
+                if 300 <= response.status_code < 400:
+                    location = response.headers.get("Location")
+                    if (
+                        response.status_code not in {301, 302, 303, 307, 308}
+                        or not location
+                    ):
+                        return None, "metadata request failed"
+                    if redirect_count == MAX_SAML_METADATA_REDIRECTS:
+                        return None, "metadata redirect limit exceeded"
+                    next_url = urljoin(current_url, location)
+                    if _metadata_origin(next_url) not in allowed_origins:
+                        return None, "metadata redirect is not allowed"
+                    current_url = next_url
+                    continue
+                response.raise_for_status()
+                declared_size = response.headers.get("Content-Length")
+                if declared_size and declared_size.isdecimal():
+                    if int(declared_size) > MAX_SAML_METADATA_BYTES:
+                        return None, "metadata exceeds size limit"
+                body = bytearray()
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    body.extend(chunk)
+                    if len(body) > MAX_SAML_METADATA_BYTES:
+                        return None, "metadata exceeds size limit"
+                xml_bytes = bytes(body)
+                if (
+                    b"<!DOCTYPE" in xml_bytes.upper()
+                    or b"<!ENTITY" in xml_bytes.upper()
+                ):
+                    return None, "invalid metadata XML"
+                return _parse_saml_metadata(xml_bytes), None
+            finally:
+                response.close()
+        except ElementTree.ParseError:
+            return None, "invalid metadata XML"
+        except Exception:
+            # Request exceptions may include a credential-bearing query.
+            return None, "metadata request failed"
+    return None, "metadata redirect limit exceeded"
 
 
-def _enrich_sso_metadata(response: dict, base_url: str) -> dict:
+def _enrich_sso_metadata(
+    response: dict,
+    base_url: str,
+    allowed_idp_origins: frozenset[MetadataOrigin] = frozenset(),
+) -> dict:
     saml_settings = response.get("samlSettings") or {}
     if response.get("configurationType") != "SAML" or not saml_settings:
         return response
 
-    metadata = {"errors": []}
+    metadata: EnrichedSAMLMetadata = {"errors": []}
     sp_url = _resolve_url(base_url, saml_settings.get("entityId"))
     idp_url = _resolve_url(base_url, saml_settings.get("idpUrl"))
+    jamf_origin = _metadata_origin(base_url)
+    jamf_origins = frozenset({jamf_origin}) if jamf_origin is not None else frozenset()
 
-    sp_metadata, sp_error = _fetch_saml_metadata(sp_url)
+    sp_metadata, sp_error = _fetch_saml_metadata(sp_url, jamf_origins)
     if sp_metadata:
         metadata["sp"] = sp_metadata
     if sp_error:
         metadata["errors"].append(f"sp: {sp_error}")
 
-    idp_metadata, idp_error = _fetch_saml_metadata(idp_url)
+    idp_metadata, idp_error = _fetch_saml_metadata(
+        idp_url, jamf_origins | allowed_idp_origins
+    )
     if idp_metadata:
         metadata["idp"] = idp_metadata
     if idp_error:
@@ -383,7 +505,7 @@ def sso(ctx: SourceContext):
         dict: The JAMF SSO settings.
     """
     response = ctx.client.get("/api/v3/sso").json()
-    response = _enrich_sso_metadata(response, ctx.base_url)
+    response = _enrich_sso_metadata(response, ctx.base_url, ctx.allowed_idp_origins)
     yield response
 
 
@@ -465,7 +587,11 @@ def computer_inventory_users(computer):
     """Yield legacy-compatible assigned-user evidence from computer inventory."""
 
     user = computer.get("userAndLocation") or {}
-    if not any(user.get(field) for field in ("username", "email", "realname")):
+    if not any(
+        isinstance(value, str) and value.strip()
+        for field in ("username", "email", "realname")
+        if (value := user.get(field)) is not None
+    ):
         return
     yield {
         "computer_id": str(computer["id"]),
@@ -513,11 +639,17 @@ def source(
     credentials: Union[
         JamfPasswordCredentials, JamfClientCredentials
     ] = dlt.secrets.value,
+    saml_metadata_allowed_origins: str | None = dlt.config.value,
 ):
     """DLT source, defines JAMF collection resources and transformers.
 
     Args:
-        credentials (JamfPasswordCredentials | JamfClientCredentials): The JAMF credentials configuration
+        credentials (JamfPasswordCredentials | JamfClientCredentials): The JAMF credentials configuration.
+        saml_metadata_allowed_origins (str | None): Comma-separated HTTPS origins
+            authorized for external IdP metadata fetches. Configure with
+            SOURCES__JAMF__SAML_METADATA_ALLOWED_ORIGINS. Without it, only the
+            configured Jamf origin may serve metadata; redirects must remain
+            within the origins authorized for that request.
 
     Returns:
         (tuple[users, user_details, sites, scripts, script_details, policy_details, policies, computers, computerextensionattributes, api_roles, api_integrations, accounts, account_details, account_groups, account_group_details]): A tuple of DLT resources/transformers registered for the JAMF source.
@@ -532,6 +664,7 @@ def source(
             paginator=SinglePagePaginator(),
         ),
         base_url=credentials.host,
+        allowed_idp_origins=_parse_allowed_idp_origins(saml_metadata_allowed_origins),
     )
 
     users_resource = users(ctx)

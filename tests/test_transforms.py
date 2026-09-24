@@ -16,6 +16,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_lookup(tenant: str = "test-tenant"):
     from unittest.mock import MagicMock
 
@@ -77,6 +78,7 @@ def _make_group(extra: dict | None = None, lookup=None):
 # Model-level site coercion — Account
 # ---------------------------------------------------------------------------
 
+
 class TestAccountSiteCoercion:
     def test_missing_site_defaults_to_sentinel(self):
         account = _make_account()
@@ -109,6 +111,7 @@ class TestAccountDirectoryBacking:
 # Model-level site coercion — Group
 # ---------------------------------------------------------------------------
 
+
 class TestGroupSiteCoercion:
     def test_missing_site_defaults_to_sentinel(self):
         group = _make_group()
@@ -131,6 +134,7 @@ class TestGroupSiteCoercion:
 # Edge tests — _admin_to_site_edges
 # ---------------------------------------------------------------------------
 
+
 class TestAdminToSiteEdges:
     def test_account_with_sentinel_site_emits_no_admin_to_site_edges(self):
         account = _make_account()  # site.id == -1
@@ -141,6 +145,7 @@ class TestAdminToSiteEdges:
         account = _make_account({"site": {"id": 42}})
         edges = list(account._admin_to_site_edges)
         from openhound_jamf.kinds import edges as ek
+
         assert len(edges) == 1
         assert edges[0].kind == ek.ADMIN_TO_SITE
 
@@ -153,6 +158,7 @@ class TestAdminToSiteEdges:
         group = _make_group({"site": {"id": 42}})
         edges = list(group._admin_to_site_edges)
         from openhound_jamf.kinds import edges as ek
+
         assert len(edges) == 1
         assert edges[0].kind == ek.ADMIN_TO_SITE
 
@@ -160,6 +166,7 @@ class TestAdminToSiteEdges:
 # ---------------------------------------------------------------------------
 # SAML normalized output
 # ---------------------------------------------------------------------------
+
 
 def _make_saml_sso(model_cls, extra: dict | None = None, lookup=None):
     base = dict(
@@ -246,21 +253,16 @@ class TestSAMLNormalizedOutput:
         emitted_edges = list(service_provider.edges)
         assert [edge.kind for edge in emitted_edges].count(ek.SAML_IMPLEMENTS) == 1
         assert [edge.kind for edge in emitted_edges].count(ek.SAML_TRUSTS_ISSUER) == 1
-        assert (
-            [edge.kind for edge in emitted_edges].count(
-                ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE
-            )
-            == 1
-        )
+        assert [edge.kind for edge in emitted_edges].count(
+            ek.SAML_HAS_ASSERTION_CONSUMER_SERVICE
+        ) == 1
 
         account_edges = [
             edge for edge in emitted_edges if edge.kind == ek.SAML_HAS_ACCOUNT
         ]
         assert len(account_edges) == 2
         assert account_edges[0].properties.match_values == ["alice@example.com"]
-        assert account_edges[0].properties.email_match_values == [
-            "alice@example.com"
-        ]
+        assert account_edges[0].properties.email_match_values == ["alice@example.com"]
         assert account_edges[0].properties.account_state == "enabled"
         assert account_edges[1].properties.match_values == ["bob@example.com"]
         assert account_edges[1].properties.account_state == "disabled"
@@ -283,8 +285,7 @@ class TestSAMLNormalizedOutput:
 
         assert rule.as_node.properties.expression_language == "cel"
         assert (
-            rule.as_node.properties.expression_profile
-            == "saml_account_resolution_v1"
+            rule.as_node.properties.expression_profile == "saml_account_resolution_v1"
         )
         assert rule.as_node.properties.expression == (
             "assertion.email_match_values.exists(value, value in "
@@ -359,18 +360,12 @@ class TestSAMLNormalizedOutput:
         service_provider = _make_saml_sso(SAMLServiceProvider, lookup=lookup)
 
         account_edges = [
-            edge
-            for edge in service_provider.edges
-            if edge.kind == ek.SAML_HAS_ACCOUNT
+            edge for edge in service_provider.edges if edge.kind == ek.SAML_HAS_ACCOUNT
         ]
 
         assert len(account_edges) == 1
-        assert account_edges[0].properties.match_values == [
-            " Alice@Example.com "
-        ]
-        assert account_edges[0].properties.email_match_values == [
-            "alice@example.com"
-        ]
+        assert account_edges[0].properties.match_values == [" Alice@Example.com "]
+        assert account_edges[0].properties.email_match_values == ["alice@example.com"]
 
     def test_issuer_node_preserves_exact_trusted_entity_id(self):
         from openhound_jamf.kinds import nodes as nk
@@ -505,8 +500,16 @@ class TestSAMLNormalizedOutput:
             "sp": {
                 "entityId": "https://jamf.test/saml/metadata",
                 "assertionConsumerServices": [
-                    {"acsUrl": "https://jamf.test/saml/SSO", "index": "0", "isDefault": True},
-                    {"acsUrl": "https://jamf.test/saml/alternate", "index": "1", "isDefault": False},
+                    {
+                        "acsUrl": "https://jamf.test/saml/SSO",
+                        "index": "0",
+                        "isDefault": True,
+                    },
+                    {
+                        "acsUrl": "https://jamf.test/saml/alternate",
+                        "index": "1",
+                        "isDefault": False,
+                    },
                 ],
             },
             "idp": {"entityId": "http://www.okta.com/example-jamf-app"},
@@ -529,7 +532,9 @@ class TestSAMLNormalizedOutput:
 # DuckDB transform tests — site column with JSON sentinel
 # ---------------------------------------------------------------------------
 
-PRIVILEGES_JSON = json.dumps({"jss_objects": ["Read Computers"], "jss_settings": [], "jss_actions": []})
+PRIVILEGES_JSON = json.dumps(
+    {"jss_objects": ["Read Computers"], "jss_settings": [], "jss_actions": []}
+)
 SENTINEL_SITE_JSON = json.dumps({"id": -1})
 
 
@@ -564,7 +569,9 @@ class TestDuckDBTransforms:
 
         account_privileges(con)
 
-        rows = con.execute("SELECT id, site_id, privilege FROM jamf.account_privileges").fetchall()
+        rows = con.execute(
+            "SELECT id, site_id, privilege FROM jamf.account_privileges"
+        ).fetchall()
         assert len(rows) == 1
         assert rows[0][1] == "-1"
 
@@ -588,6 +595,8 @@ class TestDuckDBTransforms:
 
         group_privileges(con)
 
-        rows = con.execute("SELECT id, site_id, privilege FROM jamf.group_privileges").fetchall()
+        rows = con.execute(
+            "SELECT id, site_id, privilege FROM jamf.group_privileges"
+        ).fetchall()
         assert len(rows) == 1
         assert rows[0][1] == "-1"
