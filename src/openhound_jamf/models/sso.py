@@ -10,7 +10,12 @@ from openhound.core.models.entries_dataclass import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
+from openhound_jamf.graph import (
+    JAMFAsset,
+    JAMFNode,
+    JAMFNodeProperties,
+    SAML_SOURCE_KIND,
+)
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
@@ -95,6 +100,8 @@ class SAMLNode(BaseNode):
 
     def __post_init__(self):
         self.id = self.guid(self.properties.source_object_id, self.kinds[0])
+        if SAML_SOURCE_KIND not in self.kinds:
+            self.kinds.append(SAML_SOURCE_KIND)
 
 
 @dataclass

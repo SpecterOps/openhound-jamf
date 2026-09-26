@@ -50,7 +50,7 @@ def test_inventory_only_user_emits_soft_legacy_node_and_edge() -> None:
     edge = next(iter(inventory_user.edges))
 
     assert node is not None
-    assert node.kinds == [nk.USER]
+    assert node.kinds == [nk.USER, "Jamf"]
     assert edge.end.value == node.id
     assert edge.properties.match_type == "soft_legacy"
     assert edge.properties.confidence == "low"
