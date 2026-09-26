@@ -64,6 +64,13 @@ def test_node_id_is_uppercase():
     assert node_id == node_id.upper()
 
 
+def test_native_node_declares_jamf_kind_without_changing_identity():
+    node = _make_account().as_node
+
+    assert node.kinds == [nk.ACCOUNT, "Jamf"]
+    assert node.id == JAMFNode.guid("7", nk.ACCOUNT, TENANT_ID)
+
+
 def test_id_edge_paths_reference_uppercase_node_ids():
     """Ensure uppercasing ObjectIDs does not disconnect edge endpoints."""
     account = _make_account()

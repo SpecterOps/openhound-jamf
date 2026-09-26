@@ -7,7 +7,7 @@ from openhound.core.preproc import PreProcContext
 from openhound_jamf.lookup import JamfLookup
 from openhound_jamf.transforms import transforms
 
-app = OpenHound("jamf", source_kind="jamf", help="OpenGraph collector for JAMF Pro")
+app = OpenHound("jamf", help="OpenGraph collector for JAMF Pro")
 
 
 @app.collect()

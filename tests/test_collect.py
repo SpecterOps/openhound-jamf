@@ -213,7 +213,7 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
             input_path=collect_root / "jamf",
             lookup=JamfLookup(con),
             output_path=tmp_path / "graph",
-            source_kind="jamf",
+            source_kind=app.source_kind,
             progress=Progress.log,
         )
         converter.run(
@@ -231,11 +231,25 @@ def test_convert_emits_normalized_saml_graph(tmp_path, mock_jamf_api):
     graph_edges = []
     for graph_file in (tmp_path / "graph").glob("*.json"):
         payload = json.loads(graph_file.read_text(encoding="utf-8"))
+        assert "source_kind" not in payload.get("metadata", {})
         graph_nodes.extend(payload["graph"]["nodes"])
         graph_edges.extend(payload["graph"]["edges"])
 
     node_kinds = {kind for node in graph_nodes for kind in node["kinds"]}
     edge_kinds = {edge["kind"] for edge in graph_edges}
+
+    assert app.source_kind is None
+    native_nodes = [
+        node for node in graph_nodes if node["kinds"][0].startswith("jamf_")
+    ]
+    saml_nodes = [node for node in graph_nodes if node["kinds"][0].startswith("SAML_")]
+    assert native_nodes and saml_nodes
+    assert all(node["kinds"][-1] == "Jamf" for node in native_nodes)
+    assert all(node["kinds"][-1] == "SAML" for node in saml_nodes)
+    assert all("Jamf" not in node["kinds"] for node in saml_nodes)
+    assert edge_kinds and all(
+        kind.startswith(("jamf_", "SAML_")) for kind in edge_kinds
+    )
 
     assert "SAML_ServiceProvider" in node_kinds
     assert "SAML_Issuer" in node_kinds

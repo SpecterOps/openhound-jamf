@@ -11,6 +11,9 @@ from openhound.core.models.entries_dataclass import (
 
 from openhound_jamf.kinds.nodes import TENANT
 
+JAMF_SOURCE_KIND = "Jamf"
+SAML_SOURCE_KIND = "SAML"
+
 
 @dataclass
 class JAMFNodeProperties(BaseProperties):
@@ -60,6 +63,8 @@ class JAMFNode(BaseNode):
         self.id = self.guid(
             str(self.properties.id), self.kinds[0], self.properties.tenant
         )
+        if JAMF_SOURCE_KIND not in self.kinds:
+            self.kinds.append(JAMF_SOURCE_KIND)
 
 
 class JAMFAsset(BaseAsset):

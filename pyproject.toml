@@ -26,7 +26,7 @@ local_scheme = "no-local-version"
 dev = [
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
-    "openhound",
+    "openhound>=0.4.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.1",
     "ruff>=0.15.5",

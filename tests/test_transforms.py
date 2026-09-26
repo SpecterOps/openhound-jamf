@@ -245,7 +245,7 @@ class TestSAMLNormalizedOutput:
         service_provider = _make_saml_sso(SAMLServiceProvider, lookup=lookup)
 
         node = service_provider.as_node
-        assert node.kinds == [nk.SAML_SERVICE_PROVIDER]
+        assert node.kinds == [nk.SAML_SERVICE_PROVIDER, "SAML"]
         assert node.properties.enabled is True
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
         assert node.properties.schema_contract_version == "opengraph-saml-v0.3.0"
@@ -374,7 +374,7 @@ class TestSAMLNormalizedOutput:
         issuer = _make_saml_sso(SAMLIssuer)
 
         node = issuer.as_node
-        assert node.kinds == [nk.SAML_ISSUER]
+        assert node.kinds == [nk.SAML_ISSUER, "SAML"]
         assert node.properties.entity_id == "http://www.okta.com/example-jamf-app"
         assert node.properties.comparison_mode == "exact_trimmed"
         _assert_entity_panel_queries(node)
@@ -386,7 +386,7 @@ class TestSAMLNormalizedOutput:
         acs = _make_saml_sso(SAMLAssertionConsumerService)
 
         node = acs.as_node
-        assert node.kinds == [nk.SAML_ASSERTION_CONSUMER_SERVICE]
+        assert node.kinds == [nk.SAML_ASSERTION_CONSUMER_SERVICE, "SAML"]
         assert node.properties.acs_url == "https://jamf.test/saml/SSO"
         assert node.properties.sp_entity_id == "https://jamf.test/saml/metadata"
         assert node.properties.route_key == "acs_url + sp_entity_id"
