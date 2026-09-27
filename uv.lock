@@ -869,13 +869,15 @@ wheels = [
 [[package]]
 name = "openhound-jamf"
 source = { editable = "." }
+dependencies = [
+    { name = "openhound" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "mypy" },
-    { name = "openhound" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "ruff" },
@@ -883,13 +885,13 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "openhound", specifier = ">=0.4.0" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", specifier = ">=1.19.1" },
-    { name = "openhound", specifier = ">=0.4.0" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "ruff", specifier = ">=0.15.5" },

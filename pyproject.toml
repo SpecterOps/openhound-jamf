@@ -4,6 +4,7 @@ dynamic = ["version"]
 description = "OpenGraph collector for Jamf using OpenHound"
 readme = "README.md"
 requires-python = ">=3.13"
+dependencies = ["openhound>=0.4.0"]
 authors = [
     { name = "Lance Cain", email = "lcain@specterops.io" },
     { name = "jdreijer@specterops.io", email = "jdreijer@specterops.io" }
@@ -26,7 +27,6 @@ local_scheme = "no-local-version"
 dev = [
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
-    "openhound>=0.4.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.1",
     "ruff>=0.15.5",
