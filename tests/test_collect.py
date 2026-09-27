@@ -80,7 +80,7 @@ def test_openhound_dependency_supports_per_node_source_kinds():
     )
     openhound = next(
         Requirement(dependency)
-        for dependency in project["dependency-groups"]["dev"]
+        for dependency in project["project"]["dependencies"]
         if Requirement(dependency).name == "openhound"
     )
 
