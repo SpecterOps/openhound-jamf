@@ -1,5 +1,6 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import NotRequired, TypedDict, Union
+from typing import Any, NotRequired, TypedDict, Union
 from xml.etree import ElementTree
 from urllib.parse import urljoin, urlsplit
 
@@ -40,17 +41,24 @@ from .models import (
 )
 
 
-@dataclass
-class SourceContext:
-    client: RESTClient
-    base_url: str
-    allowed_idp_origins: frozenset[tuple[str, str, int]]
-
-
 SAML_METADATA_NS = {"md": "urn:oasis:names:tc:SAML:2.0:metadata"}
 MAX_SAML_METADATA_BYTES = 2 * 1024 * 1024
 MAX_SAML_METADATA_REDIRECTS = 3
 MetadataOrigin = tuple[str, str, int]
+
+
+@dataclass
+class SourceContext:
+    """Jamf API client and authorized origins for SAML metadata requests."""
+
+    client: RESTClient
+    base_url: str
+    allowed_idp_origins: frozenset[MetadataOrigin]
+
+
+# DLT passes decoded provider records to transformers before Pydantic validates
+# their resource-specific fields. Keep the dynamic shape at this input boundary.
+RawJamfRecord = dict[str, Any]
 
 
 class SAMLACSEntry(TypedDict):
@@ -272,10 +280,11 @@ def _fetch_saml_metadata(
 
 
 def _enrich_sso_metadata(
-    response: dict,
+    response: RawJamfRecord,
     base_url: str,
     allowed_idp_origins: frozenset[MetadataOrigin] = frozenset(),
-) -> dict:
+) -> RawJamfRecord:
+    """Attach observed SP and IdP metadata with secret-safe fetch diagnostics."""
     saml_settings = response.get("samlSettings") or {}
     if response.get("configurationType") != "SAML" or not saml_settings:
         return response
@@ -303,7 +312,7 @@ def _enrich_sso_metadata(
     return {**response, "samlMetadata": metadata}
 
 
-def _saml_acs_entries(sso_config: dict) -> list[dict]:
+def _saml_acs_entries(sso_config: RawJamfRecord) -> list[SAMLACSEntry]:
     """Return every usable ACS endpoint from enriched Jamf SAML metadata."""
     sp_metadata = (sso_config.get("samlMetadata") or {}).get("sp") or {}
     endpoints = [
@@ -515,7 +524,8 @@ def sso(ctx: SourceContext):
     parallelized=True,
     columns=SAMLServiceProvider,
 )
-def saml_service_provider(sso_config):
+def saml_service_provider(sso_config: RawJamfRecord) -> Iterator[RawJamfRecord]:
+    """Forward the SSO record to the normalized service-provider asset."""
     yield sso_config
 
 
@@ -525,7 +535,10 @@ def saml_service_provider(sso_config):
     parallelized=True,
     columns=SAMLAccountResolutionRule,
 )
-def saml_account_resolution_rule(sso_config):
+def saml_account_resolution_rule(
+    sso_config: RawJamfRecord,
+) -> Iterator[RawJamfRecord]:
+    """Forward the SSO record to the account-resolution rule asset."""
     yield sso_config
 
 
@@ -535,14 +548,18 @@ def saml_account_resolution_rule(sso_config):
     parallelized=True,
     columns=SAMLAccountResolutionField,
 )
-def saml_account_resolution_field(sso_config):
+def saml_account_resolution_field(
+    sso_config: RawJamfRecord,
+) -> Iterator[RawJamfRecord]:
+    """Forward the SSO record to the exceptional account-field asset."""
     yield sso_config
 
 
 @app.transformer(
     name="saml_issuer", data_from=sso, parallelized=True, columns=SAMLIssuer
 )
-def saml_issuer(sso_config):
+def saml_issuer(sso_config: RawJamfRecord) -> Iterator[RawJamfRecord]:
+    """Forward the SSO record to the trusted-issuer asset."""
     yield sso_config
 
 
@@ -552,7 +569,10 @@ def saml_issuer(sso_config):
     parallelized=True,
     columns=SAMLAssertionConsumerService,
 )
-def saml_assertion_consumer_service(sso_config):
+def saml_assertion_consumer_service(
+    sso_config: RawJamfRecord,
+) -> Iterator[RawJamfRecord]:
+    """Forward one record per observed ACS endpoint to the ACS asset."""
     for acs in _saml_acs_entries(sso_config):
         yield {**sso_config, "samlAcs": acs}
 
@@ -583,7 +603,7 @@ def computers(ctx: SourceContext):
     parallelized=True,
     columns=InventoryAssignedUser,
 )
-def computer_inventory_users(computer):
+def computer_inventory_users(computer: RawJamfRecord) -> Iterator[RawJamfRecord]:
     """Yield legacy-compatible assigned-user evidence from computer inventory."""
 
     user = computer.get("userAndLocation") or {}
