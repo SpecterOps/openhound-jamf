@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
 from openhound.core.asset import EdgeDef, NodeDef
@@ -18,6 +19,7 @@ from openhound_jamf.graph import (
 )
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
+from openhound_jamf.lookup import JamfAccountSAMLBinding
 from openhound_jamf.main import app
 from openhound_jamf.saml_entity_panel_queries import (
     ENTITY_PANEL_QUERY_VERSION,
@@ -59,6 +61,10 @@ class SAMLNodeProperties(NodeProperties):
         route_key: Description of the route fields used for correlation.
         comparison_mode: Matching behavior required for issuer correlation.
         metadata_errors: Metadata retrieval or parsing failures retained for diagnostics.
+        expression_language: Language used by the account-resolution expression.
+        expression_profile: Shared evaluator profile for that expression.
+        expression: Canonical account-resolution expression.
+        summary: Human-readable account-resolution rule summary.
         entity_panel_query_version: Entity-panel query contract version.
         query_federation_providers: Query for federation providers using this evidence.
         query_service_providers: Query for service providers using this evidence.
@@ -95,10 +101,12 @@ class SAMLNodeProperties(NodeProperties):
 
 @dataclass
 class SAMLNode(BaseNode):
+    """Use stable SAML IDs and mark each node with its source family."""
+
     properties: SAMLNodeProperties
     id: str = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.id = self.guid(self.properties.source_object_id, self.kinds[0])
         if SAML_SOURCE_KIND not in self.kinds:
             self.kinds.append(SAML_SOURCE_KIND)
@@ -114,6 +122,10 @@ class SAMLEdgeProperties(EdgeProperties):
         match_values: Authoritative values used to match an IdP assertion to a Jamf account.
         account_state: Normalized lifecycle state of the Jamf account.
         mapping_attribute: Jamf attribute selected by the configured user mapping.
+        schema_contract_version: Contract version of the relationship evidence.
+        email_match_values: Canonical email values backed by the Jamf account field.
+        scoped_exact_match_values: Route-scoped assertion values, when available.
+        canonical_match_values: Canonical values of an exceptional account field.
     """
 
     model_layer: str = "adapter input"
@@ -128,6 +140,8 @@ class SAMLEdgeProperties(EdgeProperties):
 
 
 class ParsedAssertionConsumerService(BaseModel):
+    """One ACS endpoint observed in Jamf service-provider metadata."""
+
     acs_url: str | None = Field(alias="acsUrl", default=None)
     acs_binding: str | None = Field(alias="acsBinding", default=None)
     index: str | None = None
@@ -135,6 +149,8 @@ class ParsedAssertionConsumerService(BaseModel):
 
 
 class ParsedServiceProviderMetadata(BaseModel):
+    """Parsed Jamf service-provider metadata, including every ACS endpoint."""
+
     entity_id: str | None = Field(alias="entityId", default=None)
     acs_url: str | None = Field(alias="acsUrl", default=None)
     acs_binding: str | None = Field(alias="acsBinding", default=None)
@@ -146,6 +162,8 @@ class ParsedServiceProviderMetadata(BaseModel):
 
 
 class ParsedIdentityProviderMetadata(BaseModel):
+    """Parsed metadata for the configured upstream identity provider."""
+
     entity_id: str | None = Field(alias="entityId", default=None)
     sso_url: str | None = Field(alias="ssoUrl", default=None)
     sso_binding: str | None = Field(alias="ssoBinding", default=None)
@@ -153,12 +171,16 @@ class ParsedIdentityProviderMetadata(BaseModel):
 
 
 class ParsedSAMLMetadata(BaseModel):
+    """Metadata retained alongside producer-owned retrieval diagnostics."""
+
     sp: ParsedServiceProviderMetadata | None = None
     idp: ParsedIdentityProviderMetadata | None = None
     errors: list[str] = Field(default_factory=list)
 
 
 class SAMLSettings(BaseModel):
+    """Jamf's selected SAML identity provider and account mapping settings."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     group_attribute_name: str = Field(alias="groupAttributeName")
@@ -280,6 +302,8 @@ class SSO(JAMFAsset):
 
 
 class SAMLSSOBase(JAMFAsset):
+    """Shared, source-backed Jamf SSO facts used by normalized SAML assets."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     configuration_type: str = Field(alias="configurationType")
@@ -288,11 +312,11 @@ class SAMLSSOBase(JAMFAsset):
     sso_enabled: bool = Field(alias="ssoEnabled")
 
     @property
-    def native_sso_id(self):
+    def native_sso_id(self) -> str:
         return f"SSO-{self.configuration_type}"
 
     @property
-    def native_sso_node_id(self):
+    def native_sso_node_id(self) -> str:
         return JAMFNode.guid(self.native_sso_id, nk.SSO_INTEGRATION, self.tenant_id)
 
     @property
@@ -407,7 +431,8 @@ class SAMLSSOBase(JAMFAsset):
             return "name"
         return None
 
-    def account_match_values(self, account) -> list[str]:
+    def account_match_values(self, account: JamfAccountSAMLBinding) -> list[str]:
+        """Retain the source-exact value of the configured Jamf account field."""
         mapping = self.match_mapping_attribute
         if not mapping:
             return []
@@ -477,7 +502,8 @@ class SAMLSSOBase(JAMFAsset):
         return None
 
     @staticmethod
-    def account_state(account) -> str:
+    def account_state(account: JamfAccountSAMLBinding) -> str:
+        """Recognize explicit lifecycle values and leave other values unknown."""
         value = account.get("enabled")
         if isinstance(value, str):
             normalized = value.strip().lower()
@@ -488,11 +514,11 @@ class SAMLSSOBase(JAMFAsset):
         return "unknown"
 
     @property
-    def as_node(self):
+    def as_node(self) -> SAMLNode | None:
         return None
 
     @property
-    def edges(self):
+    def edges(self) -> Iterable[Edge]:
         return []
 
 
@@ -544,8 +570,10 @@ class SAMLSSOBase(JAMFAsset):
     ],
 )
 class SAMLServiceProvider(SAMLSSOBase):
+    """Emit the Jamf SP and its observed routes and account evidence."""
+
     @property
-    def as_node(self):
+    def as_node(self) -> SAMLNode | None:
         if not self.service_provider_objectid:
             return None
         properties = SAMLNodeProperties(
@@ -564,7 +592,7 @@ class SAMLServiceProvider(SAMLSSOBase):
         return SAMLNode(kinds=[nk.SAML_SERVICE_PROVIDER], properties=properties)
 
     @property
-    def _implements_edge(self):
+    def _implements_edge(self) -> Iterator[Edge]:
         if self.service_provider_node_id:
             yield Edge(
                 kind=ek.SAML_IMPLEMENTS,
@@ -574,7 +602,7 @@ class SAMLServiceProvider(SAMLSSOBase):
             )
 
     @property
-    def _trusts_issuer_edge(self):
+    def _trusts_issuer_edge(self) -> Iterator[Edge]:
         if self.service_provider_node_id and self.issuer_node_id:
             yield Edge(
                 kind=ek.SAML_TRUSTS_ISSUER,
@@ -584,7 +612,7 @@ class SAMLServiceProvider(SAMLSSOBase):
             )
 
     @property
-    def _has_acs_edge(self):
+    def _has_acs_edge(self) -> Iterator[Edge]:
         if not self.service_provider_node_id:
             return
         for acs in self.acs_services:
@@ -599,7 +627,7 @@ class SAMLServiceProvider(SAMLSSOBase):
             )
 
     @property
-    def _has_account_edges(self):
+    def _has_account_edges(self) -> Iterator[Edge]:
         if not self.service_provider_node_id or not self.match_mapping_attribute:
             return
 
@@ -640,7 +668,7 @@ class SAMLServiceProvider(SAMLSSOBase):
                 )
 
     @property
-    def _has_account_resolution_rule_edge(self):
+    def _has_account_resolution_rule_edge(self) -> Iterator[Edge]:
         if self.service_provider_node_id and self.account_resolution_rule_node_id:
             yield Edge(
                 kind=ek.SAML_HAS_ACCOUNT_RESOLUTION_RULE,
@@ -650,7 +678,7 @@ class SAMLServiceProvider(SAMLSSOBase):
             )
 
     @property
-    def edges(self):
+    def edges(self) -> Iterator[Edge]:
         yield from self._implements_edge
         yield from self._trusts_issuer_edge
         yield from self._has_acs_edge
@@ -676,12 +704,16 @@ class SAMLServiceProvider(SAMLSSOBase):
     ],
 )
 class SAMLAccountResolutionRule(SAMLSSOBase):
+    """Emit a supported shared-profile rule for Jamf's selected account field."""
+
     @property
-    def as_node(self):
+    def as_node(self) -> SAMLNode | None:
+        rule_node_id = self.account_resolution_rule_node_id
         if (
             not self.account_resolution_rule_objectid
             or not self.account_resolution_expression
             or not self.account_resolution_summary
+            or not rule_node_id
         ):
             return None
         return SAMLNode(
@@ -701,13 +733,13 @@ class SAMLAccountResolutionRule(SAMLSSOBase):
                 entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
                 **node_entity_panel_queries(
                     nk.SAML_ACCOUNT_RESOLUTION_RULE,
-                    self.account_resolution_rule_node_id,
+                    rule_node_id,
                 ),
             ),
         )
 
     @property
-    def edges(self):
+    def edges(self) -> Iterator[Edge]:
         if self.account_resolution_field_node_id:
             yield Edge(
                 kind=ek.SAML_USES_ACCOUNT_RESOLUTION_FIELD,
@@ -731,9 +763,12 @@ class SAMLAccountResolutionRule(SAMLSSOBase):
     ),
 )
 class SAMLAccountResolutionField(SAMLSSOBase):
+    """Identify Jamf's exceptional username field by its source-exact name."""
+
     @property
-    def as_node(self):
-        if not self.account_resolution_field_objectid:
+    def as_node(self) -> SAMLNode | None:
+        field_node_id = self.account_resolution_field_node_id
+        if not self.account_resolution_field_objectid or not field_node_id:
             return None
         return SAMLNode(
             kinds=[nk.SAML_ACCOUNT_RESOLUTION_FIELD],
@@ -749,13 +784,13 @@ class SAMLAccountResolutionField(SAMLSSOBase):
                 entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
                 **node_entity_panel_queries(
                     nk.SAML_ACCOUNT_RESOLUTION_FIELD,
-                    self.account_resolution_field_node_id,
+                    field_node_id,
                 ),
             ),
         )
 
     @property
-    def edges(self):
+    def edges(self) -> list[Edge]:
         return []
 
 
@@ -769,9 +804,12 @@ class SAMLAccountResolutionField(SAMLSSOBase):
     ),
 )
 class SAMLIssuer(SAMLSSOBase):
+    """Emit only an issuer observed in the configured IdP metadata."""
+
     @property
-    def as_node(self):
-        if not self.issuer_objectid or not self.issuer_entity_id:
+    def as_node(self) -> SAMLNode | None:
+        issuer_node_id = self.issuer_node_id
+        if not self.issuer_objectid or not self.issuer_entity_id or not issuer_node_id:
             return None
         properties = SAMLNodeProperties(
             source_object_id=self.issuer_objectid,
@@ -784,12 +822,12 @@ class SAMLIssuer(SAMLSSOBase):
             comparison_mode="exact_trimmed",
             metadata_errors=self.metadata_errors,
             entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
-            **node_entity_panel_queries(nk.SAML_ISSUER, self.issuer_node_id),
+            **node_entity_panel_queries(nk.SAML_ISSUER, issuer_node_id),
         )
         return SAMLNode(kinds=[nk.SAML_ISSUER], properties=properties)
 
     @property
-    def edges(self):
+    def edges(self) -> list[Edge]:
         return []
 
 
@@ -803,6 +841,8 @@ class SAMLIssuer(SAMLSSOBase):
     ),
 )
 class SAMLAssertionConsumerService(SAMLSSOBase):
+    """Emit each concrete ACS endpoint associated with the Jamf SP entity."""
+
     saml_acs: ParsedAssertionConsumerService | None = Field(
         alias="samlAcs",
         default=None,
@@ -815,12 +855,13 @@ class SAMLAssertionConsumerService(SAMLSSOBase):
         return self.acs_services[0] if self.acs_services else None
 
     @property
-    def as_node(self):
+    def as_node(self) -> SAMLNode | None:
         acs = self.selected_acs
         if not acs or not acs.acs_url or not self.sp_entity_id:
             return None
         objectid = self.acs_objectid_for(acs.acs_url)
-        if not objectid:
+        acs_node_id = self.acs_node_id_for(acs.acs_url)
+        if not objectid or not acs_node_id:
             return None
         properties = SAMLNodeProperties(
             source_object_id=objectid,
@@ -835,7 +876,7 @@ class SAMLAssertionConsumerService(SAMLSSOBase):
             entity_panel_query_version=ENTITY_PANEL_QUERY_VERSION,
             **node_entity_panel_queries(
                 nk.SAML_ASSERTION_CONSUMER_SERVICE,
-                self.acs_node_id_for(acs.acs_url),
+                acs_node_id,
             ),
         )
         return SAMLNode(
@@ -843,5 +884,5 @@ class SAMLAssertionConsumerService(SAMLSSOBase):
         )
 
     @property
-    def edges(self):
+    def edges(self) -> list[Edge]:
         return []

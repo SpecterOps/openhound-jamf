@@ -1,8 +1,20 @@
 import json
 from functools import lru_cache
+from typing import TypedDict
 
 from duckdb import DuckDBPyConnection
 from openhound.core.lookup import LookupManager
+
+
+class JamfAccountSAMLBinding(TypedDict):
+    """Account fields retained as source evidence for SAML resolution."""
+
+    id: int | str
+    name: str | None
+    full_name: str | None
+    email: str | None
+    email_address: str | None
+    enabled: str | bool | None
 
 
 class JamfLookup(LookupManager):
@@ -32,7 +44,7 @@ class JamfLookup(LookupManager):
         return frozenset(row[0] for row in rows)
 
     @lru_cache
-    def users_by_email(self, email: str):
+    def users_by_email(self, email: str) -> list[tuple[int | str]]:
         if "email" not in self._table_columns("user_details"):
             return []
         return self._find_all_objects(
@@ -44,7 +56,7 @@ class JamfLookup(LookupManager):
         )
 
     @lru_cache
-    def users_by_name(self, name: str):
+    def users_by_name(self, name: str) -> list[tuple[int | str]]:
         columns = self._table_columns("user_details")
         if not {"name", "full_name"}.issubset(columns):
             return []
@@ -118,15 +130,25 @@ class JamfLookup(LookupManager):
         return self._find_all_objects(f"SELECT id FROM {self.schema}.account_details")
 
     @lru_cache
-    def all_account_saml_bindings(self):
+    def all_account_saml_bindings(self) -> list[JamfAccountSAMLBinding]:
+        """Return native account values without inferring a SAML match family."""
         rows = self.client.execute(
             f"""
             SELECT id, name, full_name, email, email_address, enabled
             FROM {self.schema}.account_details
             """
         ).fetchall()
-        keys = ("id", "name", "full_name", "email", "email_address", "enabled")
-        return [dict(zip(keys, row, strict=True)) for row in rows]
+        return [
+            JamfAccountSAMLBinding(
+                id=row[0],
+                name=row[1],
+                full_name=row[2],
+                email=row[3],
+                email_address=row[4],
+                enabled=row[5],
+            )
+            for row in rows
+        ]
 
     @lru_cache
     def all_groups(self):

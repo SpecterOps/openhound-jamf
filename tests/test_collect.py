@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from importlib.metadata import version
 import json
+from pathlib import Path
+import tomllib
 
+from packaging.requirements import Requirement
+from packaging.version import Version
 import pytest
 
 pytestmark = pytest.mark.usefixtures("mock_dlt_requests")
@@ -65,6 +70,25 @@ PREPROC_RESOURCES = {
     "saml_issuer": "saml_issuer",
     "saml_assertion_consumer_service": "saml_assertion_consumer_service",
 }
+
+
+def test_openhound_dependency_supports_per_node_source_kinds():
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+    openhound = next(
+        Requirement(dependency)
+        for dependency in project["dependency-groups"]["dev"]
+        if Requirement(dependency).name == "openhound"
+    )
+
+    assert any(
+        spec.operator == ">=" and Version(spec.version) >= Version("0.4.0")
+        for spec in openhound.specifier
+    )
+    assert Version(version("openhound")) in openhound.specifier
 
 
 def _run_collect_and_assert(

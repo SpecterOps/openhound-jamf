@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from openhound.core.asset import EdgeDef, NodeDef
@@ -180,6 +181,8 @@ class User(JAMFAsset):
     ],
 )
 class InventoryAssignedUser(JAMFAsset):
+    """Preserve computer inventory assignments lacking a native user link."""
+
     computer_id: str
     username: str | None = None
     realname: str | None = None
@@ -231,7 +234,7 @@ class InventoryAssignedUser(JAMFAsset):
         return JAMFNode.guid(str(self._target_raw_id), nk.USER, self.tenant_id)
 
     @property
-    def as_node(self):
+    def as_node(self) -> JAMFNode | None:
         identity = self._identity
         if identity is None or self._match:
             return None
@@ -258,7 +261,7 @@ class InventoryAssignedUser(JAMFAsset):
         )
 
     @property
-    def edges(self):
+    def edges(self) -> Iterator[Edge]:
         identity = self._identity
         if identity is None:
             return

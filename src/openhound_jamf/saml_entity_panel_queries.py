@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 
 
 ENTITY_PANEL_QUERY_VERSION = "saml-entity-panel-queries-v0.1.0"
+
+
+class EntityPanelQueries(TypedDict, total=False):
+    """Query properties supported by normalized Jamf SAML nodes."""
+
+    query_federation_providers: str
+    query_service_providers: str
+    query_service_provider: str
+    query_account_resolution_rule: str
+    query_accounts: str
+
 
 _CYPHER_ESCAPES = {
     "\\": "\\\\",
@@ -33,7 +46,7 @@ def cypher_string_literal(value: str) -> str:
     return f"'{''.join(encoded)}'"
 
 
-def node_entity_panel_queries(kind: str, node_id: str) -> dict[str, str]:
+def node_entity_panel_queries(kind: str, node_id: str) -> EntityPanelQueries:
     """Return the canonical query properties for one normalized SAML node."""
 
     selected = cypher_string_literal(node_id.upper())
