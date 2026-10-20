@@ -1,0 +1,8 @@
+{
+  "name": "Jamf: Tier Zero Assigned Computers",
+  "zone": "Tier Zero",
+  "description": "Adds Jamf computers to Tier Zero that have assigned users matching Tier Zero principal attributes.",
+  "cypher": "MATCH (q:jamf_Computer) - [:jamf_AssignedUser] -> () - [] -> (l)\nWHERE l.tier = 0\nRETURN DISTINCT q",
+  "enabled": true,
+  "allow_disable": true
+}
