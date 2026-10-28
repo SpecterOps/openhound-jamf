@@ -128,7 +128,8 @@ jobs:
           build-args: |
             COLLECTOR_VERSION=${{ steps.image.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          # Cache availability must not prevent publishing a release.
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }},ignore-error=true
 
       - name: Update latest alias for newest release
         env:

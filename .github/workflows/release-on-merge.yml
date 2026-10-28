@@ -84,7 +84,7 @@ jobs:
     secrets: inherit
 
   publish-container:
-    needs: tag-release
+    needs: [tag-release, publish]
     if: needs.tag-release.outputs.new_version != ''
     permissions:
       contents: read
