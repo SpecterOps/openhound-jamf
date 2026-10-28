@@ -1,0 +1,5 @@
+[runtime]
+log_cli_level = "INFO"
+
+[destination.bloodhoundenterprise]
+collector_name = "jamf"

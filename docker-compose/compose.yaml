@@ -1,0 +1,63 @@
+name: openhound-jamf
+
+services:
+  storage-init:
+    image: ${OPENHOUND_IMAGE:-ghcr.io/specterops/openhound-jamf:latest}
+    user: "0:0"
+    network_mode: none
+    restart: "no"
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import os
+        from pathlib import Path
+        for name in ("/var/lib/openhound", "/var/lib/openhound/work", "/var/lib/openhound/dlt", "/var/lib/openhound/dlt/pipelines", "/var/lib/openhound/logs", "/tmp/openhound"):
+            path = Path(name)
+            path.mkdir(parents=True, exist_ok=True)
+            os.chown(path, 65532, 65532)
+        print("Collector storage is ready.")
+    volumes:
+      - collector-data:/var/lib/openhound
+      - raw-data:/tmp/openhound
+
+  scheduler-jamf:
+    image: ${OPENHOUND_IMAGE:-ghcr.io/specterops/openhound-jamf:latest}
+    user: "65532:65532"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    entrypoint: ["python", "/app/src/scheduler.py"]
+    working_dir: /var/lib/openhound/work
+    environment:
+      DLT_PROJECT_DIR: /app
+      DLT_DATA_DIR: /var/lib/openhound/dlt
+      PIPELINES_DIR: /var/lib/openhound/dlt/pipelines
+      RUNTIME__LOG_PATH: /var/lib/openhound/logs
+      DESTINATION__BLOODHOUNDENTERPRISE__COLLECTOR_NAME: jamf
+    volumes:
+      - type: bind
+        source: ./.dlt
+        target: /app/.dlt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./check_config.py
+        target: /opt/openhound-check-config.py
+        read_only: true
+        bind:
+          create_host_path: false
+      - collector-data:/var/lib/openhound
+      - raw-data:/tmp/openhound
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  collector-data:
+  raw-data:

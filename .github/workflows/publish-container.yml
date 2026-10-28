@@ -1,0 +1,158 @@
+name: Build and publish container
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing release tag to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'SpecterOps/openhound-jamf' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [cli, enterprise]
+    steps:
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "Expected a release tag such as v0.20.0" >&2
+            exit 1
+          }
+
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Set image metadata
+        id: image
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          SUFFIX=""
+          if [[ "$TARGET" == cli ]]; then SUFFIX="-cli"; fi
+          {
+            echo "version=$VERSION"
+            echo "tag=$IMAGE:$VERSION$SUFFIX"
+            echo "latest_tag=$IMAGE:latest$SUFFIX"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build smoke-test image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          load: true
+          tags: openhound-jamf:smoke
+          build-args: |
+            COLLECTOR_VERSION=${{ steps.image.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+
+      - name: Verify runtime and installed collector
+        env:
+          EXPECTED_VERSION: ${{ steps.image.outputs.version }}
+        run: |
+          docker run --rm --entrypoint python -e EXPECTED_VERSION openhound-jamf:smoke -c '
+          import importlib.metadata as metadata
+          import os
+          import runpy
+          from unittest.mock import patch
+          import openhound_jamf.main
+          assert os.getuid() == os.getgid() == 65532
+          assert metadata.version("openhound-jamf") == os.environ["EXPECTED_VERSION"]
+          entries = metadata.entry_points(group="openhound.sources")
+          assert any(entry.name == "jamf" and entry.load() for entry in entries)
+          with patch.dict(os.environ, {
+              "DESTINATION__BLOODHOUNDENTERPRISE__URL": "https://example.invalid",
+              "DESTINATION__BLOODHOUNDENTERPRISE__TOKEN_ID": "smoke-test-id",
+              "DESTINATION__BLOODHOUNDENTERPRISE__TOKEN_KEY": "smoke-test-key",
+          }), patch("openhound.scheduler.service.Service", autospec=True) as service:
+              runpy.run_path("/app/src/scheduler.py", run_name="__main__")
+              service.assert_called_once_with(
+                  bhe_uri="https://example.invalid",
+                  token_id="smoke-test-id",
+                  token_key="smoke-test-key",
+                  collector_name="jamf",
+              )
+              service.return_value.start.assert_called_once_with()
+          '
+
+      - name: Verify CLI
+        if: matrix.target == 'cli'
+        run: docker run --rm openhound-jamf:smoke --help
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-architecture image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          tags: ${{ steps.image.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+          build-args: |
+            COLLECTOR_VERSION=${{ steps.image.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+      - name: Update latest alias for newest release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          VERSIONED_TAG: ${{ steps.image.outputs.tag }}
+          LATEST_TAG: ${{ steps.image.outputs.latest_tag }}
+        run: |
+          NEWEST_RELEASE_TAG=$(
+            git ls-remote --refs --tags origin 'refs/tags/v*' |
+              awk '$2 ~ /^refs\/tags\/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ {
+                sub("^refs/tags/", "", $2)
+                print $2
+              }' |
+              sort -V |
+              tail -n 1
+          )
+          if [[ -z "$NEWEST_RELEASE_TAG" ]]; then
+            echo "Unable to determine the newest release tag" >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "$NEWEST_RELEASE_TAG" ]]; then
+            echo "Skipping $LATEST_TAG: newest release is $NEWEST_RELEASE_TAG"
+            exit 0
+          fi
+          docker buildx imagetools create \
+            --tag "$LATEST_TAG" \
+            "$VERSIONED_TAG"

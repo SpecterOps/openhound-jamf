@@ -2,92 +2,93 @@ name: Create Release Tag and publish new version
 
 on:
   pull_request:
-    branches:
-      - main
-    types:
-      - closed
+    branches: [main]
+    types: [closed]
     paths:
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
       - "README.md"
+      - "extension.yaml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker-compose/**"
+      - ".github/workflows/release-on-merge.yml"
+      - ".github/workflows/publish.yml"
+      - ".github/workflows/publish-container.yml"
 
 permissions:
-  contents: write
-  id-token: write   # This is required for requesting the JWT for the OIDC provider
+  contents: read
+
+# Serialize complete releases, including latest aliases, and retain pending runs.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
-
-  #  TODO: Re-enable tests when pushed
-  #  test-core:
-  #    if: github.event.pull_request.merged == true
-  #    uses: ./.github/workflows/test.yml
-  #    secrets: inherit
-
   tag-release:
-    #    needs: test-core
-    if: github.event.pull_request.merged == true
+    if: >-
+      github.repository == 'SpecterOps/openhound-jamf' &&
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+    outputs:
+      new_version: ${{ steps.versioning.outputs.new_version }}
     steps:
-      - name: Checkout
+      - name: Checkout merged commit
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
-      - name: Fetch tags
-        run: git fetch --tags
-
-      - name: Determine next version
+      - name: Determine release version
         id: versioning
+        env:
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
         run: |
-          # Get latest tag or fallback
-          LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0"
-          fi
-
-          echo "Latest tag: $LATEST_TAG"
-
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          echo "Merged branch: $BRANCH_NAME"
-
-          if [[ "$BRANCH_NAME" == fix/* || "$BRANCH_NAME" == patch/* || "$BRANCH_NAME" == chore/* ]]; then
-            PATCH=$((PATCH + 1))
-          elif [[ "$BRANCH_NAME" == feature/* || "$BRANCH_NAME" == minor/* ]]; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
-          elif [[ "$BRANCH_NAME" == major/* ]]; then
-            MAJOR=$((MAJOR + 1))
-            MINOR=0
-            PATCH=0
-          else
-            echo "Branch does not trigger release."
+          git fetch --tags
+          # Reuse this merge's release on retries rather than minting a new version.
+          EXISTING_TAG=$(git tag --points-at HEAD --sort=v:refname |
+            { grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true; } | tail -n 1)
+          if [[ -n "$EXISTING_TAG" ]]; then
+            echo "new_version=$EXISTING_TAG" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
+          LATEST_TAG=$(git tag --sort=v:refname |
+            { grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true; } | tail -n 1)
+          VERSION=${LATEST_TAG:-v0.0.0}
+          VERSION=${VERSION#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          case "$BRANCH_NAME" in
+            fix/*|patch/*|chore/*) PATCH=$((PATCH + 1)) ;;
+            feature/*|minor/*) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major/*) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            *) echo "Branch does not trigger release."; exit 0 ;;
+          esac
           NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
-
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Next version: $NEW_VERSION"
-
-      - name: Create and push tag
-        if: env.NEW_VERSION != ''
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          git tag $NEW_VERSION
-          git push origin $NEW_VERSION
+          git tag "$NEW_VERSION"
+          git push origin "$NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: tag-release
-    if: github.event.pull_request.merged == true
+    if: needs.tag-release.outputs.new_version != ''
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.tag-release.outputs.new_version }}
     secrets: inherit
+
+  publish-container:
+    needs: tag-release
+    if: needs.tag-release.outputs.new_version != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-container.yml
+    with:
+      tag: ${{ needs.tag-release.outputs.new_version }}
