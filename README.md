@@ -40,3 +40,19 @@ BloodHound.
 Follow the OpenHound docs to get started:
 
 - [OpenHound Documentation](https://bloodhound.specterops.io/openhound/overview)
+
+## Containers
+
+Each new release publishes multi-architecture images to GHCR with versions
+matching the automatically generated PyPI package version:
+
+- Scheduler: `ghcr.io/specterops/openhound-jamf:latest` or `:<version>`
+- CLI: `ghcr.io/specterops/openhound-jamf:latest-cli` or `:<version>-cli`
+
+Use the [Docker Compose deployment guide](docker-compose/README.md) to configure
+and run the non-root BHE scheduler with persistent storage and local preflight
+checks. To inspect CLI usage:
+
+```sh
+docker run --rm ghcr.io/specterops/openhound-jamf:latest-cli --help
+```

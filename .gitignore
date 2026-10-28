@@ -220,3 +220,18 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local Compose configuration and credentials; keep the safe examples.
+!docker-compose/.dlt/
+docker-compose/.env
+docker-compose/.dlt/*
+!docker-compose/.dlt/*.example
+docker-compose/**/*.pem
+docker-compose/**/*.key
+docker-compose/**/*.p12
+docker-compose/**/*.pfx
+docker-compose/**/id_rsa*
+docker-compose/**/id_ed25519*
+docker-compose/**/*.jwk
+docker-compose/**/*.p8
+docker-compose/**/id_ecdsa*

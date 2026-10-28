@@ -23,6 +23,7 @@ local_scheme = "no-local-version"
 "extension.yaml" = "openhound_jamf/extension.yaml"
 
 [dependency-groups]
+container = ["openhound>=0.2.12,<0.3"]
 dev = [
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
