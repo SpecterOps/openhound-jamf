@@ -29,3 +29,5 @@ UPDATE_SSO_SETTINGS = "jamf_Update_SSO_Settings"
 MATCHED_EMAIL = "jamf_MatchedEmail"
 MATCHED_NAME = "jamf_MatchedName"
 AZ_MATCHED_EMAIL = "jamf_AZMatchedEmail"
+
+LDAP_MATCH = "jamf_LDAPMatch"

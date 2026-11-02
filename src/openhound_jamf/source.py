@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
+from threading import Lock
 from typing import Union
 from urllib.parse import urlsplit
 
@@ -11,6 +13,12 @@ from dlt.sources.helpers.rest_client.paginators import (
 
 from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
+from .models.cloudldap import (
+    CloudUserResponse,
+    CloudUserTest,
+    LDAPServer,
+    normalize_ldap_servers,
+)
 from .models import (
     SSO,
     Account,
@@ -35,9 +43,93 @@ from .models import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class SourceContext:
     client: RESTClient
+    _cloud_snapshot: CloudIntegrationSnapshot | None = field(default=None, init=False)
+    _cloud_error: Exception | None = field(default=None, init=False)
+    _cloud_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _unsupported_logged: set[str] = field(default_factory=set, init=False)
+
+    def cloud_snapshot(self) -> CloudIntegrationSnapshot:
+        # Resources run in parallel: share one complete provider snapshot per run.
+        with self._cloud_lock:
+            if self._cloud_error is not None:
+                raise self._cloud_error
+            if self._cloud_snapshot is None:
+                try:
+                    self._cloud_snapshot = fetch_cloud_integrations(self.client)
+                except Exception as error:
+                    self._cloud_error = error
+                    raise
+            return self._cloud_snapshot
+
+    def account_cloud_tests(self, account: dict) -> list[dict]:
+        if not account.get("directory_user"):
+            return []
+        associations = [
+            LDAPServer.model_validate(item)
+            for item in normalize_ldap_servers(
+                account.get("ldap_server", account.get("ldap_servers"))
+            )
+        ]
+        if not associations:
+            return []
+        provider_ids = {server.id for server in associations}
+        tests = []
+        for provider in self.cloud_snapshot().results:
+            if provider.id not in provider_ids or not provider.enabled:
+                continue
+            evidence = dict(
+                provider_id=provider.id,
+                provider_name=provider.provider_name,
+                requested_username=account["name"],
+            )
+            if provider.provider_name != "AZURE":
+                with self._cloud_lock:
+                    if provider.id not in self._unsupported_logged:
+                        message = (
+                            "Google Workspace Cloud Integration not currently supported"
+                            if provider.provider_name == "GOOGLE"
+                            else "Cloud Integration provider not currently supported"
+                        )
+                        logger.warning(message, extra={"provider_id": provider.id})
+                        self._unsupported_logged.add(provider.id)
+                test = CloudUserTest(**evidence, status="unsupported")
+            else:
+                try:
+                    response = self.client.post(
+                        f"/api/v1/cloud-idp/{provider.id}/test-user",
+                        json={"username": account["name"]},
+                    )
+                    response.raise_for_status()
+                    result = CloudUserResponse.model_validate(response.json())
+                    if any(user.server_id != provider.id for user in result.results):
+                        raise ValueError(
+                            "Cloud directory response belongs to another provider"
+                        )
+                    test = CloudUserTest(
+                        **evidence,
+                        status="success",
+                        total_count=result.total_count,
+                        results=result.results,
+                    )
+                except Exception as error:
+                    # Keep the principal even when its optional directory lookup fails.
+                    logger.warning(
+                        "Cloud directory lookup failed for account %s, provider %s: %s",
+                        account["id"],
+                        provider.id,
+                        type(error).__name__,
+                    )
+                    test = CloudUserTest(
+                        **evidence, status="error", error=type(error).__name__
+                    )
+            tests.append(test.model_dump(mode="json"))
+        return tests
 
 
 @app.resource(name="users", parallelized=True, columns=BaseUser)
@@ -90,7 +182,17 @@ def account_details(user, ctx: SourceContext):
         account (Account): The JAMF account including account details, parsed by the Pydantic Account model.
     """
     response = ctx.client.get(f"/JSSResource/accounts/userid/{user['id']}").json()
-    yield response["account"]
+    account = response["account"]
+    try:
+        account["cloud_idp_user_tests"] = ctx.account_cloud_tests(account)
+    except Exception as error:
+        logger.warning(
+            "Cloud directory enrichment failed for account %s: %s",
+            account["id"],
+            type(error).__name__,
+        )
+        account["cloud_idp_user_tests"] = []
+    yield account
 
 
 @app.resource(name="account_groups", parallelized=True, columns=BaseGroup)
@@ -267,19 +369,14 @@ def api_roles(ctx: SourceContext):
         yield role
 
 
-@app.resource(
-    name="cloud_integrations",
-    parallelized=True,
-    columns=CloudIntegrationSnapshot,
-)
-def cloud_integrations(ctx: SourceContext):
-    """Collect every Cloud Identity Provider, including an explicit empty snapshot."""
+def fetch_cloud_integrations(client: RESTClient) -> CloudIntegrationSnapshot:
+    """Fetch a complete provider snapshot for all resources in this source run."""
     integrations: list[CloudIntegration] = []
     expected_total: int | None = None
     page_number = 0
 
     while True:
-        response = ctx.client.get(
+        response = client.get(
             "/api/v1/cloud-idp",
             params={"page": page_number, "page-size": 100},
         )
@@ -308,7 +405,17 @@ def cloud_integrations(ctx: SourceContext):
         results=integrations,
         cloudintegrationenabled=any(item.enabled for item in integrations),
     )
-    yield snapshot.model_dump(mode="json")
+    return snapshot
+
+
+@app.resource(
+    name="cloud_integrations",
+    parallelized=True,
+    columns=CloudIntegrationSnapshot,
+)
+def cloud_integrations(ctx: SourceContext):
+    """Persist the same provider snapshot used for account directory searches."""
+    yield ctx.cloud_snapshot().model_dump(mode="json")
 
 
 @app.resource(name="tenant", parallelized=True, columns=Tenant)

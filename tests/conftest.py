@@ -57,6 +57,20 @@ def mock_jamf_api() -> Any:
         }
     ]
 
+    app.state.cloud_user_response = {"totalCount": 0, "results": []}
+    app.state.cloud_user_status = 200
+
+    @app.post("/api/v1/cloud-idp/{provider_id}/test-user")
+    async def cloud_user_test(provider_id: str, request: Request):
+        from fastapi.responses import JSONResponse
+
+        payload = await request.json()
+        app.state.calls.append("cloud_user_test")
+        app.state.last_cloud_user_request = (provider_id, payload)
+        return JSONResponse(
+            app.state.cloud_user_response, status_code=app.state.cloud_user_status
+        )
+
     @app.post("/api/v1/auth/token")
     async def auth_token():
         app.state.calls.append("auth_token")

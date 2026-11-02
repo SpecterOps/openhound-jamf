@@ -126,3 +126,11 @@ class JamfLookup(LookupManager):
                 "Cloud Identity Provider snapshot has an invalid enabled status."
             )
         return enabled
+
+    @lru_cache
+    def ldap_match_user_ids(self, account_id: int) -> list[str]:
+        rows = self.client.execute(
+            f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_matches WHERE account_id = ?",
+            [account_id],
+        ).fetchall()
+        return [row[0] for row in rows]
