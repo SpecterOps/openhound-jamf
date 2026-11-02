@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class LDAPServer(BaseModel):
-    """An account's configured directory association, not a graph node."""
+    """An account or group's configured directory association, not a graph node."""
 
     id: str
     name: str = ""
