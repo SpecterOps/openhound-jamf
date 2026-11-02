@@ -108,3 +108,21 @@ class JamfLookup(LookupManager):
         return self._find_single_object(
             f"SELECT configuration_type FROM {self.schema}.sso WHERE sso_enabled = true"
         )
+
+    @lru_cache
+    def cloud_integration_enabled(self) -> bool:
+        """Return a native boolean; missing collection evidence is an error."""
+        rows = self.client.execute(
+            f"SELECT cloudintegrationenabled FROM {self.schema}.cloud_integrations"
+        ).fetchall()
+        if len(rows) != 1:
+            raise RuntimeError(
+                "Expected one Cloud Identity Provider snapshot. "
+                "Run collection and preprocessing with cloud_integrations included."
+            )
+        enabled = rows[0][0]
+        if not isinstance(enabled, bool):
+            raise RuntimeError(
+                "Cloud Identity Provider snapshot has an invalid enabled status."
+            )
+        return enabled

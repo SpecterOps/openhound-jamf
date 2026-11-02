@@ -32,6 +32,7 @@ def preproc(ctx: PreProcContext):
         "script_details": "script_details",
         "api_integrations": "api_integrations",
         "api_roles": "api_roles",
+        "cloud_integrations": "cloud_integrations",
         "computerextensionattributes": "computerextensionattributes",
         "sites": "sites",
         "user_details": "user_details",

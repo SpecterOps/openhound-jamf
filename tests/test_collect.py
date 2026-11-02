@@ -11,6 +11,7 @@ EXPECTED_RESOURCES = [
     "account_group_details",
     "api_integrations",
     "api_roles",
+    "cloud_integrations",
     "computerextensionattributes",
     "computers",
     "policy_details",
@@ -39,6 +40,7 @@ BASE_EXPECTED_CALLS = Counter(
         "api_integrations": 1,
         "api_roles": 1,
         "sso": 1,
+        "cloud_integrations": 1,
     }
 )
 

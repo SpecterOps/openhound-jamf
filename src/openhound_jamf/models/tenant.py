@@ -11,6 +11,7 @@ from openhound_jamf.main import app
 class TenantProperties(JAMFNodeProperties):
     """JAMF Tenant node properties"""
 
+    cloudintegrationenabled: bool
     collected: bool = True
 
 
@@ -37,6 +38,7 @@ class Tenant(JAMFAsset):
             tenant=self.id,
             tier=0,
             environmentid=self.tenant_node_id,
+            cloudintegrationenabled=self._lookup.cloud_integration_enabled(),
         )
         return JAMFNode(kinds=[nk.TENANT], properties=properties)
 

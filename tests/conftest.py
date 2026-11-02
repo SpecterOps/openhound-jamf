@@ -35,6 +35,27 @@ def mock_jamf_api() -> Any:
 
     app = FastAPI()
     app.state.calls = []
+    app.state.cloud_idp_pages = [
+        {
+            "totalCount": 2,
+            "results": [
+                {
+                    "id": "1001",
+                    "displayName": "Entra ID",
+                    "enabled": True,
+                    "providerName": "AZURE",
+                    "providerDescription": "Entra ID",
+                },
+                {
+                    "id": "1002",
+                    "displayName": "Test",
+                    "enabled": True,
+                    "providerName": "AZURE",
+                    "providerDescription": "Entra ID",
+                },
+            ],
+        }
+    ]
 
     @app.post("/api/v1/auth/token")
     async def auth_token():
@@ -126,6 +147,11 @@ def mock_jamf_api() -> Any:
     async def api_integrations(page: int | None = None):
         app.state.calls.append("api_integrations")
         return _page_payload("v1/api-integrations.json", page)
+
+    @app.get("/api/v1/cloud-idp")
+    async def cloud_idp(page: int = 0):
+        app.state.calls.append("cloud_integrations")
+        return app.state.cloud_idp_pages[page]
 
     @app.get("/api/v1/api-roles")
     async def api_roles(page: int | None = None):

@@ -21,6 +21,9 @@ from .models import (
     BasePolicy,
     BaseScript,
     BaseUser,
+    CloudIntegration,
+    CloudIntegrationResponse,
+    CloudIntegrationSnapshot,
     Computer,
     ComputerextensionAttribute,
     Group,
@@ -264,6 +267,50 @@ def api_roles(ctx: SourceContext):
         yield role
 
 
+@app.resource(
+    name="cloud_integrations",
+    parallelized=True,
+    columns=CloudIntegrationSnapshot,
+)
+def cloud_integrations(ctx: SourceContext):
+    """Collect every Cloud Identity Provider, including an explicit empty snapshot."""
+    integrations: list[CloudIntegration] = []
+    expected_total: int | None = None
+    page_number = 0
+
+    while True:
+        response = ctx.client.get(
+            "/api/v1/cloud-idp",
+            params={"page": page_number, "page-size": 100},
+        )
+        response.raise_for_status()
+        page = CloudIntegrationResponse.model_validate(response.json())
+
+        if expected_total is None:
+            expected_total = page.total_count
+        elif page.total_count != expected_total:
+            raise RuntimeError(
+                "Cloud Identity Provider count changed during collection; retry."
+            )
+
+        integrations.extend(page.results)
+        if len(integrations) == expected_total:
+            break
+        if not page.results or len(integrations) > expected_total:
+            raise RuntimeError(
+                "Cloud Identity Provider pagination returned an incomplete "
+                "or inconsistent collection."
+            )
+        page_number += 1
+
+    snapshot = CloudIntegrationSnapshot(
+        total_count=len(integrations),
+        results=integrations,
+        cloudintegrationenabled=any(item.enabled for item in integrations),
+    )
+    yield snapshot.model_dump(mode="json")
+
+
 @app.resource(name="tenant", parallelized=True, columns=Tenant)
 def tenant(host: str):
     parse_host = urlsplit(host)
@@ -312,6 +359,7 @@ def source(
         sites(ctx),
         api_integrations(ctx),
         api_roles(ctx),
+        cloud_integrations(ctx),
         sso(ctx),
         tenant(credentials.host),
     )
