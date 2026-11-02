@@ -261,7 +261,7 @@ class Account(JAMFAsset):
             privilege_settings=self.privileges.jss_settings if self.privileges else [],
             environmentid=self.tenant_node_id,
             privilege_set=self.privilege_set,
-            local_account=self.directory_user,
+            local_account=not self.directory_user,
         )
         return JAMFNode(kinds=[nk.ACCOUNT], properties=properties)
 
