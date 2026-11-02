@@ -31,7 +31,7 @@ class AccountProperties(JAMFNodeProperties):
         privilege_actions: The list of privilege actions
         privilege_settings: The list of privilege settings
         privilege_set:
-        local_account: Whether the account is local account
+        directory_user: Whether the account logs in locally or uses a directory identity provider
         collected: Indicates that the account is collected by OpenHound
     """
 
@@ -44,7 +44,7 @@ class AccountProperties(JAMFNodeProperties):
     privilege_actions: list[str]
     privilege_settings: list[str]
     privilege_set: str
-    local_account: bool
+    directory_user: bool
     collected: bool = True
 
 
@@ -261,7 +261,7 @@ class Account(JAMFAsset):
             privilege_settings=self.privileges.jss_settings if self.privileges else [],
             environmentid=self.tenant_node_id,
             privilege_set=self.privilege_set,
-            local_account=not self.directory_user,
+            directory_user=self.directory_user,
         )
         return JAMFNode(kinds=[nk.ACCOUNT], properties=properties)
 
