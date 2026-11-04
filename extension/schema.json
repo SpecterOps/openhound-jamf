@@ -97,6 +97,11 @@
   ],
   "relationship_kinds": [
     {
+      "name": "jamf_CloudIntegrationLink",
+      "description": "Represents a cloud integration configuration within a Jamf Pro tenant and its connection to the configured cloud provider tenant.",
+      "is_traversable": false
+    },
+    {
       "name": "jamf_Contains",
       "description": "Represents a structural containment relationship where the source node contains the target resource.",
       "is_traversable": true

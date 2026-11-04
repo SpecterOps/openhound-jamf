@@ -31,3 +31,4 @@ MATCHED_NAME = "jamf_MatchedName"
 AZ_MATCHED_EMAIL = "jamf_AZMatchedEmail"
 
 LDAP_MATCH = "jamf_LDAPMatch"
+CLOUD_INTEGRATION_LINK = "jamf_CloudIntegrationLink"

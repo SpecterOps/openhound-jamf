@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from requests import HTTPError
 
 from openhound_jamf.graph import JAMFNode
+from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.models.cloudintegration import (
     CloudIntegrationAsset,
@@ -111,6 +113,75 @@ def test_identity_is_stable_across_rename_and_distinct_across_tenants_and_kinds(
     )
     restored = CloudIntegrationAsset.model_validate_json(original.model_dump_json())
     assert restored.as_node.id == original.graph_id
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_cloud_links_target_jamf_ids_and_azure_objectid(enabled):
+    payload = detail()
+    payload["server"]["tenantId"] = "abcdef12-3456-4789-abcd-123456789abc"
+    payload["server"]["enabled"] = enabled
+    integration = asset(details=payload, summary=summary(enabled=enabled))
+    # Exercise the saved representation used by preprocessing and conversion.
+    restored = CloudIntegrationAsset.model_validate_json(integration.model_dump_json())
+    tenant_link, azure_link = [asdict(edge) for edge in restored.edges]
+    assert tenant_link["start"] == {
+        "match_by": "id",
+        "value": JAMFNode.guid(TENANT, nk.TENANT, TENANT),
+    }
+    assert (
+        tenant_link["end"]
+        == azure_link["start"]
+        == {
+            "match_by": "id",
+            "value": restored.as_node.id,
+        }
+    )
+    assert azure_link["end"] == {
+        "match_by": "property",
+        "kind": "AZTenant",
+        "property_matchers": [
+            {
+                "key": "objectid",
+                "value": "ABCDEF12-3456-4789-ABCD-123456789ABC",
+                "operator": "equals",
+            }
+        ],
+    }
+    for edge in (tenant_link, azure_link):
+        assert edge["kind"] == ek.CLOUD_INTEGRATION_LINK
+        assert edge["properties"]["traversable"] is False
+
+
+@pytest.mark.parametrize("tenant_id", [None, "", "not-a-uuid", "/TENANTS/invalid"])
+def test_unavailable_azure_identity_retains_jamf_link(tenant_id, caplog):
+    if tenant_id is None:
+        integration = asset(details=False, details_error="HTTPError")
+    else:
+        payload = detail()
+        payload["server"]["tenantId"] = tenant_id
+        integration = asset(details=payload)
+    links = list(integration.edges)
+    assert len(links) == 1
+    assert links[0].end.value == integration.as_node.id
+    assert links[0].properties.traversable is False
+    assert "Skipping Azure tenant link" in caplog.text
+
+
+def test_cloud_link_schema_is_registered_and_non_traversable():
+    schema_file = Path(__file__).parents[1] / "extension" / "schema.json"
+    schema = json.loads(schema_file.read_text())
+    relationship = next(
+        kind
+        for kind in schema["relationship_kinds"]
+        if kind["name"] == ek.CLOUD_INTEGRATION_LINK
+    )
+    assert relationship["is_traversable"] is False
+    names = [
+        kind["name"]
+        for collection in ("node_kinds", "relationship_kinds")
+        for kind in schema[collection]
+    ]
+    assert len(names) == len(set(names))
 
 
 @pytest.mark.parametrize("change", ["graph", "server", "common", "provider"])
@@ -282,6 +353,16 @@ def test_provider_node_collect_preprocess_convert(
     ]
     providers = [node for node in nodes if nk.CLOUD_INTEGRATION in node["kinds"]]
     assert len(providers) == (0 if outcome == "google" else 1)
+    links = [
+        edge
+        for path in output.glob("*.json")
+        for edge in json.loads(path.read_text())["graph"]["edges"]
+        if edge["kind"] == ek.CLOUD_INTEGRATION_LINK
+    ]
+    assert len(links) == (
+        0 if outcome == "google" else 1 if outcome == "partial" else 2
+    )
+    assert all(edge["properties"]["traversable"] is False for edge in links)
     if providers:
         node = providers[0]
         assert node["id"] == stored_id
@@ -289,4 +370,20 @@ def test_provider_node_collect_preprocess_convert(
         assert node["properties"]["enabled"] is (outcome != "disabled")
         assert all(value is not None for value in node["properties"].values())
         assert "objectid" not in node["properties"]
+        tenant_link = next(edge for edge in links if edge["end"]["match_by"] == "id")
+        assert tenant_link["start"]["value"] == JAMFNode.guid(TENANT, nk.TENANT, TENANT)
+        assert tenant_link["end"]["value"] == node["id"]
+        if outcome != "partial":
+            azure_link = next(
+                edge for edge in links if edge["end"]["match_by"] == "property"
+            )
+            assert azure_link["start"]["value"] == node["id"]
+            assert azure_link["end"]["kind"] == "AZTenant"
+            assert azure_link["end"]["property_matchers"] == [
+                {
+                    "key": "objectid",
+                    "value": "33333333-3333-4333-8333-333333333333",
+                    "operator": "equals",
+                }
+            ]
     assert mock_jamf_api.app.state.calls == calls_before

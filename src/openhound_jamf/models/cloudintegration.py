@@ -1,10 +1,19 @@
+import logging
 import math
 import re
 from datetime import UTC, datetime
+from uuid import UUID
 
-from openhound.core.asset import NodeDef
+from openhound.core.asset import EdgeDef, NodeDef
 from openhound.core.models.entries import Node as PydanticNode
 from openhound.core.models.entries import NodeProperties as PydanticProperties
+from openhound.core.models.entries_dataclass import (
+    ConditionalEdgePath,
+    Edge,
+    EdgePath,
+    EdgeProperties,
+    PropertyMatch,
+)
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -17,8 +26,11 @@ from pydantic import (
 )
 
 from openhound_jamf.graph import JAMFAsset, JAMFNode
+from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+
+logger = logging.getLogger(__name__)
 
 
 class CloudIntegration(BaseModel):
@@ -209,7 +221,22 @@ class CloudIntegrationNode(PydanticNode):
         color="#0078D4",
         properties=CloudIntegrationProperties,
     ),
-    edges=[],
+    edges=[
+        EdgeDef(
+            start=nk.TENANT,
+            end=nk.CLOUD_INTEGRATION,
+            kind=ek.CLOUD_INTEGRATION_LINK,
+            description="The Jamf Pro tenant contains this cloud integration configuration.",
+            traversable=False,
+        ),
+        EdgeDef(
+            start=nk.CLOUD_INTEGRATION,
+            end="AZTenant",
+            kind=ek.CLOUD_INTEGRATION_LINK,
+            description="The cloud integration configuration references this Azure tenant.",
+            traversable=False,
+        ),
+    ],
 )
 class CloudIntegrationAsset(JAMFAsset):
     """Persist the collection-time identity and both API response representations."""
@@ -274,4 +301,42 @@ class CloudIntegrationAsset(JAMFAsset):
 
     @property
     def edges(self):
-        return []
+        edges = [
+            Edge(
+                kind=ek.CLOUD_INTEGRATION_LINK,
+                start=EdgePath(
+                    match_by="id",
+                    value=JAMFNode.guid(self.tenant, nk.TENANT, self.tenant),
+                ),
+                end=EdgePath(match_by="id", value=self.graph_id),
+                properties=EdgeProperties(traversable=False),
+            )
+        ]
+        if self.details is None:
+            logger.warning(
+                "Skipping Azure tenant link for cloud integration %s: details unavailable",
+                self.summary.id,
+            )
+            return edges
+        try:
+            azure_tenant_id = str(UUID(self.details.server.tenant_id)).upper()
+        except ValueError:
+            logger.warning(
+                "Skipping Azure tenant link for cloud integration %s: invalid tenant UUID",
+                self.summary.id,
+            )
+            return edges
+        edges.append(
+            Edge(
+                kind=ek.CLOUD_INTEGRATION_LINK,
+                start=EdgePath(match_by="id", value=self.graph_id),
+                end=ConditionalEdgePath(
+                    kind="AZTenant",
+                    property_matchers=[
+                        PropertyMatch(key="objectid", value=azure_tenant_id)
+                    ],
+                ),
+                properties=EdgeProperties(traversable=False),
+            )
+        )
+        return edges
