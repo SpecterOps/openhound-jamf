@@ -86,6 +86,27 @@ def mock_jamf_api() -> Any:
             app.state.cloud_group_response, status_code=app.state.cloud_group_status
         )
 
+    app.state.cloud_azure_overrides = {}
+    app.state.cloud_azure_status = {}
+
+    @app.get("/api/v1/cloud-azure/{provider_id}")
+    async def cloud_azure_details(provider_id: str):
+        from fastapi.responses import JSONResponse
+
+        app.state.calls.append("cloud_azure_details")
+        payload = _load_json("v1/cloud-azure.json")
+        payload["cloudIdPCommon"]["id"] = provider_id
+        payload["server"]["id"] = provider_id
+        for page in app.state.cloud_idp_pages:
+            for provider in page["results"]:
+                if provider["id"] == provider_id:
+                    payload["cloudIdPCommon"]["displayName"] = provider["displayName"]
+                    payload["server"]["enabled"] = provider["enabled"]
+        return JSONResponse(
+            app.state.cloud_azure_overrides.get(provider_id, payload),
+            status_code=app.state.cloud_azure_status.get(provider_id, 200),
+        )
+
     @app.post("/api/v1/auth/token")
     async def auth_token():
         app.state.calls.append("auth_token")

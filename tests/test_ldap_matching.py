@@ -141,7 +141,7 @@ def test_google_logs_once_and_never_posts(caplog):
         assert ctx.account_cloud_tests(account())[0]["status"] == "unsupported"
     ctx.client.post.assert_not_called()
     assert (
-        caplog.text.count("Google Workspace Cloud Integration not currently supported")
+        caplog.text.count("Google cloud integrations are unsupported.")
         == 1
     )
 

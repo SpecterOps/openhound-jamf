@@ -120,7 +120,7 @@ def test_google_logging_is_shared_with_account_searches(caplog):
     values = group() | {"directory_user": True}
     ctx.account_cloud_tests(values)
     assert (
-        caplog.text.count("Google Workspace Cloud Integration not currently supported")
+        caplog.text.count("Google cloud integrations are unsupported.")
         == 1
     )
     ctx.client.post.assert_not_called()

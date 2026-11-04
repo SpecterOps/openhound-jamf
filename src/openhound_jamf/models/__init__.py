@@ -2,7 +2,9 @@ from .account import Account, BaseAccount
 from .api_integrations import ApiIntegration
 from .api_roles import ApiRole
 from .cloudintegration import (
+    AzureCloudConfiguration,
     CloudIntegration,
+    CloudIntegrationAsset,
     CloudIntegrationResponse,
     CloudIntegrationSnapshot,
 )
@@ -21,7 +23,9 @@ __all__ = [
     "Account",
     "ApiRole",
     "ApiIntegration",
+    "AzureCloudConfiguration",
     "CloudIntegration",
+    "CloudIntegrationAsset",
     "CloudIntegrationResponse",
     "CloudIntegrationSnapshot",
     "Computer",

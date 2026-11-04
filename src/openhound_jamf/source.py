@@ -13,6 +13,8 @@ from dlt.sources.helpers.rest_client.paginators import (
 
 from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
+from .graph import JAMFNode
+from .kinds import nodes as nk
 from .models.cloudldap import (
     CloudGroupResponse,
     CloudGroupTest,
@@ -31,7 +33,9 @@ from .models import (
     BasePolicy,
     BaseScript,
     BaseUser,
+    AzureCloudConfiguration,
     CloudIntegration,
+    CloudIntegrationAsset,
     CloudIntegrationResponse,
     CloudIntegrationSnapshot,
     Computer,
@@ -51,6 +55,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SourceContext:
     client: RESTClient
+    tenant_id: str | None = None
     _cloud_snapshot: CloudIntegrationSnapshot | None = field(default=None, init=False)
     _cloud_error: Exception | None = field(default=None, init=False)
     _cloud_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -129,7 +134,7 @@ class SourceContext:
         with self._cloud_lock:
             if provider.id not in self._unsupported_logged:
                 message = (
-                    "Google Workspace Cloud Integration not currently supported"
+                    "Google cloud integrations are unsupported."
                     if provider.provider_name == "GOOGLE"
                     else "Cloud Integration provider not currently supported"
                 )
@@ -489,6 +494,48 @@ def cloud_integrations(ctx: SourceContext):
     yield ctx.cloud_snapshot().model_dump(mode="json")
 
 
+@app.resource(
+    name="cloud_integration_details",
+    parallelized=True,
+    columns=CloudIntegrationAsset,
+)
+def cloud_integration_details(ctx: SourceContext):
+    """Collect one Azure graph asset per discovered provider, including disabled ones."""
+    if not ctx.tenant_id:
+        raise ValueError(
+            "A Jamf tenant hostname is required for cloud integration identity"
+        )
+    for provider in ctx.cloud_snapshot().results:
+        if provider.provider_name != "AZURE":
+            ctx.log_unsupported_provider(provider)
+            continue
+        identity = dict(
+            summary=provider,
+            graph_id=JAMFNode.guid(provider.id, nk.CLOUD_INTEGRATION, ctx.tenant_id),
+            tenant=ctx.tenant_id,
+        )
+        try:
+            response = ctx.client.get(f"/api/v1/cloud-azure/{provider.id}")
+            response.raise_for_status()
+            details = AzureCloudConfiguration.model_validate(response.json())
+            asset = CloudIntegrationAsset(**identity, details=details)
+            if provider.enabled != details.server.enabled:
+                logger.warning(
+                    "Cloud integration %s enabled status differs between summary and details",
+                    provider.id,
+                )
+        except Exception as error:
+            logger.warning(
+                "Cloud integration detail collection failed for provider %s: %s",
+                provider.id,
+                type(error).__name__,
+            )
+            asset = CloudIntegrationAsset(
+                **identity, details_error=type(error).__name__
+            )
+        yield asset.model_dump(mode="json")
+
+
 @app.resource(name="tenant", parallelized=True, columns=Tenant)
 def tenant(host: str):
     parse_host = urlsplit(host)
@@ -512,12 +559,13 @@ def source(
     """
 
     ctx = SourceContext(
+        tenant_id=urlsplit(credentials.host).hostname,
         client=RESTClient(
             base_url=credentials.host,
             headers={"accept": "application/json"},
             auth=JamfAuth(credentials=credentials),
             paginator=SinglePagePaginator(),
-        )
+        ),
     )
 
     users_resource = users(ctx)
@@ -538,6 +586,7 @@ def source(
         api_integrations(ctx),
         api_roles(ctx),
         cloud_integrations(ctx),
+        cloud_integration_details(ctx),
         sso(ctx),
         tenant(credentials.host),
     )

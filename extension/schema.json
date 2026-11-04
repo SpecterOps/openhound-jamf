@@ -85,6 +85,14 @@
       "is_display_kind": true,
       "icon": "address-card",
       "color": "#FFFFFF"
+    },
+    {
+      "name": "jamf_CloudIntegration",
+      "display_name": "Jamf Cloud Integration",
+      "description": "Represents a configured Azure cloud integration in the Jamf Pro tenant. When enabled, the cloud integration can perform lookups to map attributes matching Jamf directory service accounts or groups, making it a node with significant security implications.",
+      "is_display_kind": true,
+      "icon": "cloud-arrow-up",
+      "color": "#0078D4"
     }
   ],
   "relationship_kinds": [
