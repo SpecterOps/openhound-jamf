@@ -71,6 +71,21 @@ def mock_jamf_api() -> Any:
             app.state.cloud_user_response, status_code=app.state.cloud_user_status
         )
 
+    app.state.group_details_override = None
+    app.state.cloud_group_response = {"totalCount": 0, "results": []}
+    app.state.cloud_group_status = 200
+
+    @app.post("/api/v1/cloud-idp/{provider_id}/test-group")
+    async def cloud_group_test(provider_id: str, request: Request):
+        from fastapi.responses import JSONResponse
+
+        payload = await request.json()
+        app.state.calls.append("cloud_group_test")
+        app.state.last_cloud_group_request = (provider_id, payload)
+        return JSONResponse(
+            app.state.cloud_group_response, status_code=app.state.cloud_group_status
+        )
+
     @app.post("/api/v1/auth/token")
     async def auth_token():
         app.state.calls.append("auth_token")
@@ -112,6 +127,8 @@ def mock_jamf_api() -> Any:
     @app.get("/JSSResource/accounts/groupid/{group_id}")
     async def account_group_details(group_id: int):
         app.state.calls.append("account_group_details")
+        if app.state.group_details_override is not None:
+            return app.state.group_details_override
         return _load_json("jss_resource/group-by-id.json")
 
     @app.get("/JSSResource/policies")

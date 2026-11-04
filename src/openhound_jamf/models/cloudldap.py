@@ -65,6 +65,63 @@ class CloudUserTest(BaseModel):
     collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class CloudGroupResult(BaseModel):
+    """An Azure group resolved by a Cloud Identity Provider test search."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    uuid: UUID
+    id: str | None = None
+    server_id: str = Field(alias="serverId")
+    name: str
+    distinguished_name: str = Field(default="", alias="distinguishedName")
+
+    @field_validator("id", "server_id", mode="before")
+    @classmethod
+    def normalize_id(cls, value):
+        return str(value) if isinstance(value, int) else value
+
+    @model_validator(mode="after")
+    def consistent_identity(self):
+        # Jamf's generic id can be a group name; uuid identifies the Azure object.
+        if self.id is not None:
+            try:
+                object_id = UUID(self.id)
+            except ValueError:
+                return self
+            if object_id != self.uuid:
+                raise ValueError("Cloud directory group id and uuid disagree")
+        return self
+
+
+class CloudGroupResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    total_count: int = Field(alias="totalCount", ge=0)
+    results: list[CloudGroupResult]
+
+    @model_validator(mode="after")
+    def complete_results(self):
+        if self.total_count != len(self.results):
+            raise ValueError(
+                "Cloud directory group search returned an incomplete result set"
+            )
+        return self
+
+
+class CloudGroupTest(BaseModel):
+    """Collected group search evidence; never exported as graph properties."""
+
+    provider_id: str
+    provider_name: str
+    requested_groupname: str
+    status: Literal["success", "error", "unsupported"]
+    total_count: int = Field(default=0, ge=0)
+    results: list[CloudGroupResult] = Field(default_factory=list)
+    error: str = ""
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 def normalize_ldap_servers(value):
     if value is None or value == {}:
         return []
@@ -97,3 +154,25 @@ def matched_cloud_users(test: CloudUserTest, email: str) -> list[tuple[str, str]
             if isinstance(value, str) and value.strip().casefold() == normalized_email:
                 matches.add((str(result.uuid).upper(), "email"))
     return sorted(matches)
+
+
+def matched_cloud_groups(test: CloudGroupTest, name: str) -> list[tuple[str, str]]:
+    """Resolve complete group evidence, requiring matching names for ambiguity."""
+    if test.status != "success" or test.provider_name != "AZURE":
+        return []
+    if test.total_count != len(test.results):
+        return []
+    if any(result.server_id != test.provider_id for result in test.results):
+        return []
+    if len(test.results) == 1:
+        return [(str(test.results[0].uuid).upper(), "single_result")]
+    normalized_name = name.strip().casefold()
+    if not normalized_name:
+        return []
+    return sorted(
+        {
+            (str(result.uuid).upper(), "name")
+            for result in test.results
+            if result.name.strip().casefold() == normalized_name
+        }
+    )

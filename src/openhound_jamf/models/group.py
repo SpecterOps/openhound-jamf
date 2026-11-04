@@ -1,14 +1,24 @@
 from dataclasses import dataclass, field
 
 from openhound.core.asset import EdgeDef, NodeDef
-from openhound.core.models.entries_dataclass import Edge, EdgePath, EdgeProperties
+from openhound.core.models.entries_dataclass import (
+    ConditionalEdgePath,
+    Edge,
+    EdgePath,
+    EdgeProperties,
+    PropertyMatch,
+)
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
-from openhound_jamf.models.cloudldap import LDAPServer, normalize_ldap_servers
+from openhound_jamf.models.cloudldap import (
+    CloudGroupTest,
+    LDAPServer,
+    normalize_ldap_servers,
+)
 from openhound_jamf.models.utils import NO_SITE_ID, normalize_site
 
 
@@ -55,6 +65,13 @@ class Privilege(BaseModel):
         properties=GroupProperties,
     ),
     edges=[
+        EdgeDef(
+            start="AZGroup",
+            end=nk.GROUP,
+            kind=ek.LDAP_MATCH,
+            description="The Azure directory group matched this Jamf group through its configured Cloud Identity Provider.",
+            traversable=True,
+        ),
         EdgeDef(
             start=nk.TENANT,
             end=nk.GROUP,
@@ -223,6 +240,8 @@ class Group(JAMFAsset):
         default_factory=list,
         validation_alias=AliasChoices("ldap_server", "ldap_servers"),
     )
+
+    cloud_idp_group_tests: list[CloudGroupTest] = Field(default_factory=list)
 
     @field_validator("ldap_server", mode="before")
     @classmethod
@@ -591,6 +610,23 @@ class Group(JAMFAsset):
                     )
 
     @property
+    def _ldap_match_edges(self):
+        if not self.ldap_server:
+            return
+        for azure_object_id in self._lookup.ldap_match_group_ids(self.id):
+            yield Edge(
+                kind=ek.LDAP_MATCH,
+                start=ConditionalEdgePath(
+                    kind="AZGroup",
+                    property_matchers=[
+                        PropertyMatch(key="objectid", value=azure_object_id)
+                    ],
+                ),
+                end=EdgePath(match_by="id", value=self._node_id),
+                properties=EdgeProperties(traversable=True),
+            )
+
+    @property
     def edges(self):
         yield from self._contains_edge
         yield from self._member_of_edges
@@ -613,3 +649,4 @@ class Group(JAMFAsset):
         yield from self._update_api_client_and_create_roles_edge
         yield from self._update_api_client_and_assign_role_edge
         yield from self._update_sso_settings_edges
+        yield from self._ldap_match_edges

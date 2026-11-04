@@ -101,6 +101,103 @@ def cloud_ldap_matches(con, schema: str = "jamf") -> None:
         )
 
 
+def cloud_ldap_group_matches(con, schema: str = "jamf") -> None:
+    """Resolve group search evidence against the group's own enabled Azure providers."""
+    # Keep imports local because main.py imports transforms before constructing app.
+    from openhound_jamf.models.cloudintegration import CloudIntegrationSnapshot
+    from openhound_jamf.models.cloudldap import (
+        CloudGroupTest,
+        LDAPServer,
+        matched_cloud_groups,
+        normalize_ldap_servers,
+    )
+
+    con.execute(f"""
+        CREATE OR REPLACE TABLE {schema}.cloud_ldap_group_matches (
+            group_id BIGINT, provider_id VARCHAR, azure_object_id VARCHAR,
+            match_method VARCHAR
+        )
+    """)
+    columns = {
+        row[0]
+        for row in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = ?",
+            [schema, "account_group_details"],
+        ).fetchall()
+    }
+    if not {"cloud_idp_group_tests", "ldap_server"}.issubset(columns):
+        logger.warning(
+            "Group LDAP matching evidence is missing; recollect group details to generate jamf_LDAPMatch edges"
+        )
+        return
+
+    def decode(value):
+        return json.loads(value) if isinstance(value, str) else value
+
+    snapshots = con.execute(
+        f"SELECT total_count, results, cloudintegrationenabled FROM {schema}.cloud_integrations"
+    ).fetchall()
+    if len(snapshots) != 1:
+        raise ValueError(
+            "Expected one Cloud Identity Provider snapshot for group LDAP matching"
+        )
+    count, results, enabled = snapshots[0]
+    snapshot = CloudIntegrationSnapshot.model_validate(
+        {
+            "total_count": count,
+            "results": decode(results),
+            "cloudintegrationenabled": enabled,
+        }
+    )
+    if not snapshot.cloudintegrationenabled:
+        return
+    providers = {
+        provider.id
+        for provider in snapshot.results
+        if provider.enabled and provider.provider_name == "AZURE"
+    }
+    groups = con.execute(f"""
+        SELECT id, name, ldap_server, cloud_idp_group_tests
+        FROM {schema}.account_group_details
+    """).fetchall()
+    matches = set()
+    for group_id, name, servers, tests in groups:
+        try:
+            associated = {
+                LDAPServer.model_validate(server).id
+                for server in normalize_ldap_servers(decode(servers))
+            }
+            if not associated:
+                continue
+            for raw_test in decode(tests) or []:
+                test = CloudGroupTest.model_validate(raw_test)
+                if (
+                    test.provider_id not in associated
+                    or test.provider_id not in providers
+                ):
+                    continue
+                if test.requested_groupname != name:
+                    continue
+                resolved = matched_cloud_groups(test, name)
+                if len(resolved) > 1:
+                    logger.warning(
+                        "Multiple directory groups match group %s, provider %s",
+                        group_id,
+                        test.provider_id,
+                    )
+                for object_id, method in resolved:
+                    matches.add((group_id, test.provider_id, object_id, method))
+        except (ValidationError, ValueError, TypeError) as error:
+            logger.warning(
+                "Invalid LDAP evidence for group %s: %s", group_id, type(error).__name__
+            )
+    if matches:
+        con.executemany(
+            f"INSERT INTO {schema}.cloud_ldap_group_matches VALUES (?, ?, ?, ?)",
+            sorted(matches),
+        )
+
+
 def account_privileges(con, schema: str = "jamf") -> None:
     """Unnested privileges for accounts"""
     con.execute(f"""
@@ -209,6 +306,7 @@ def policy_target_computers(con, schema: str = "jamf") -> None:
 
 def transforms(con: duckdb.DuckDBPyConnection, schema: str = "jamf") -> None:
     cloud_ldap_matches(con, schema)
+    cloud_ldap_group_matches(con, schema)
     account_privileges(con, schema)
     group_privileges(con, schema)
     api_privileges(con, schema)

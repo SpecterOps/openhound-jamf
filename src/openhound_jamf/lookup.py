@@ -134,3 +134,11 @@ class JamfLookup(LookupManager):
             [account_id],
         ).fetchall()
         return [row[0] for row in rows]
+
+    @lru_cache
+    def ldap_match_group_ids(self, group_id: int) -> list[str]:
+        rows = self.client.execute(
+            f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_group_matches WHERE group_id = ?",
+            [group_id],
+        ).fetchall()
+        return [row[0] for row in rows]

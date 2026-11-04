@@ -14,6 +14,8 @@ from dlt.sources.helpers.rest_client.paginators import (
 from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
 from .models.cloudldap import (
+    CloudGroupResponse,
+    CloudGroupTest,
     CloudUserResponse,
     CloudUserTest,
     LDAPServer,
@@ -89,15 +91,7 @@ class SourceContext:
                 requested_username=account["name"],
             )
             if provider.provider_name != "AZURE":
-                with self._cloud_lock:
-                    if provider.id not in self._unsupported_logged:
-                        message = (
-                            "Google Workspace Cloud Integration not currently supported"
-                            if provider.provider_name == "GOOGLE"
-                            else "Cloud Integration provider not currently supported"
-                        )
-                        logger.warning(message, extra={"provider_id": provider.id})
-                        self._unsupported_logged.add(provider.id)
+                self.log_unsupported_provider(provider)
                 test = CloudUserTest(**evidence, status="unsupported")
             else:
                 try:
@@ -126,6 +120,73 @@ class SourceContext:
                         type(error).__name__,
                     )
                     test = CloudUserTest(
+                        **evidence, status="error", error=type(error).__name__
+                    )
+            tests.append(test.model_dump(mode="json"))
+        return tests
+
+    def log_unsupported_provider(self, provider: CloudIntegration) -> None:
+        with self._cloud_lock:
+            if provider.id not in self._unsupported_logged:
+                message = (
+                    "Google Workspace Cloud Integration not currently supported"
+                    if provider.provider_name == "GOOGLE"
+                    else "Cloud Integration provider not currently supported"
+                )
+                logger.warning(message, extra={"provider_id": provider.id})
+                self._unsupported_logged.add(provider.id)
+
+    def group_cloud_tests(self, group: dict) -> list[dict]:
+        associations = [
+            LDAPServer.model_validate(item)
+            for item in normalize_ldap_servers(
+                group.get("ldap_server", group.get("ldap_servers"))
+            )
+        ]
+        if not associations:
+            return []
+        snapshot = self.cloud_snapshot()
+        if not snapshot.cloudintegrationenabled:
+            return []
+        provider_ids = {server.id for server in associations}
+        tests = []
+        for provider in snapshot.results:
+            if provider.id not in provider_ids or not provider.enabled:
+                continue
+            evidence = dict(
+                provider_id=provider.id,
+                provider_name=provider.provider_name,
+                requested_groupname=group["name"],
+            )
+            if provider.provider_name != "AZURE":
+                self.log_unsupported_provider(provider)
+                test = CloudGroupTest(**evidence, status="unsupported")
+            else:
+                try:
+                    response = self.client.post(
+                        f"/api/v1/cloud-idp/{provider.id}/test-group",
+                        json={"groupname": group["name"]},
+                    )
+                    response.raise_for_status()
+                    result = CloudGroupResponse.model_validate(response.json())
+                    if any(item.server_id != provider.id for item in result.results):
+                        raise ValueError(
+                            "Cloud directory group response belongs to another provider"
+                        )
+                    test = CloudGroupTest(
+                        **evidence,
+                        status="success",
+                        total_count=result.total_count,
+                        results=result.results,
+                    )
+                except Exception as error:
+                    logger.warning(
+                        "Cloud directory lookup failed for group %s, provider %s: %s",
+                        group["id"],
+                        provider.id,
+                        type(error).__name__,
+                    )
+                    test = CloudGroupTest(
                         **evidence, status="error", error=type(error).__name__
                     )
             tests.append(test.model_dump(mode="json"))
@@ -223,7 +284,17 @@ def account_group_details(group, ctx: SourceContext):
         group (Group): The JAMF account group including group details, parsed by the Pydantic Group model.
     """
     response = ctx.client.get(f"/JSSResource/accounts/groupid/{group['id']}").json()
-    yield response["group"]
+    details = response["group"]
+    try:
+        details["cloud_idp_group_tests"] = ctx.group_cloud_tests(details)
+    except Exception as error:
+        logger.warning(
+            "Cloud directory enrichment failed for group %s: %s",
+            details["id"],
+            type(error).__name__,
+        )
+        details["cloud_idp_group_tests"] = []
+    yield details
 
 
 @app.resource(name="policies", parallelized=True, columns=BasePolicy)

@@ -22,6 +22,7 @@ from openhound_jamf.transforms import cloud_ldap_matches
 USER_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_ID = "22222222-2222-4222-8222-222222222222"
 
+
 def provider(id="1002", enabled=True, kind="AZURE"):
     return dict(
         id=id,
@@ -75,7 +76,7 @@ def evidence(results, **overrides):
     values = dict(
         provider_id="1002",
         provider_name="AZURE",
-        requested_username="lcain",
+        requested_username=account()["name"],
         status="success",
         total_count=len(results),
         results=results,
@@ -108,7 +109,7 @@ def test_azure_search_body_and_shared_snapshot():
     tests = ctx.account_cloud_tests(account())
     assert tests[0]["status"] == "success"
     ctx.client.post.assert_called_once_with(
-        "/api/v1/cloud-idp/1002/test-user", json={"username": "lcain"}
+        "/api/v1/cloud-idp/1002/test-user", json={"username": account()["name"]}
     )
     with ThreadPoolExecutor(max_workers=4) as pool:
         snapshots = list(pool.map(lambda _: ctx.cloud_snapshot(), range(8)))
