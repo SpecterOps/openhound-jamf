@@ -13,6 +13,7 @@ from openhound_jamf.source import SourceContext, cloud_integrations
 
 
 def integration(enabled):
+    """Build a synthetic cloud-provider summary with the requested enabled state."""
     return {
         "id": "1001",
         "displayName": "Entra ID",
@@ -23,6 +24,7 @@ def integration(enabled):
 
 
 def collect_pages(pages, status_error=None):
+    """Collect configured mock provider pages and return emitted rows and the client."""
     client = MagicMock()
     responses = []
     for page in pages:
@@ -39,6 +41,7 @@ def collect_pages(pages, status_error=None):
     [([], False), ([False], False), ([False, True], True), ([True, True], True)],
 )
 def test_snapshot_enabled_status(enabled_values, expected):
+    """Verify the tenant flag reflects whether any collected provider is enabled."""
     rows, _ = collect_pages(
         [
             {
@@ -55,6 +58,7 @@ def test_snapshot_enabled_status(enabled_values, expected):
 
 
 def test_enabled_integration_on_later_page():
+    """Verify provider pagination includes enabled integrations beyond the first page."""
     rows, client = collect_pages(
         [
             {"totalCount": 2, "results": [integration(False)]},
@@ -84,17 +88,20 @@ def test_enabled_integration_on_later_page():
 )
 def test_failed_collection_never_emits_disabled_snapshot(pages):
     # OpenHound's resource wrapper logs errors and suppresses the failed resource.
+    """Verify invalid or incomplete enumeration emits no misleading disabled snapshot."""
     rows, _ = collect_pages(pages)
     assert rows == []
 
 
 def test_http_failure_never_emits_snapshot():
+    """Verify a provider enumeration HTTP error emits no snapshot."""
     rows, _ = collect_pages([{}], status_error=HTTPError("403 Forbidden"))
     assert rows == []
 
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_lookup_exports_native_tenant_boolean(enabled):
+    """Verify tenant conversion exports the stored integration flag as a boolean."""
     with duckdb.connect() as con:
         con.execute("CREATE SCHEMA jamf")
         con.execute("CREATE TABLE jamf.tenant AS SELECT 'example.jamfcloud.com' AS id")
@@ -111,6 +118,7 @@ def test_lookup_exports_native_tenant_boolean(enabled):
 
 @pytest.mark.parametrize("values", [[], [True, False], [None], ["False"]])
 def test_lookup_rejects_missing_or_invalid_snapshot(values):
+    """Verify lookup rejects ambiguous, missing, null, or non-boolean snapshot values."""
     with duckdb.connect() as con:
         con.execute("CREATE SCHEMA jamf")
         column_type = "VARCHAR" if values == ["False"] else "BOOLEAN"
@@ -124,6 +132,7 @@ def test_lookup_rejects_missing_or_invalid_snapshot(values):
 
 
 def test_lookup_rejects_missing_table():
+    """Verify absent provider collection data raises a database error."""
     with duckdb.connect() as con:
         with pytest.raises(duckdb.CatalogException):
             JamfLookup(con).cloud_integration_enabled()
@@ -134,6 +143,7 @@ def test_lookup_rejects_missing_table():
 def test_collection_preprocessing_and_tenant_export(
     tmp_path, monkeypatch, mock_jamf_api, enabled_values
 ):
+    """Verify mocked collection and preprocessing preserve the tenant integration flag."""
     from openhound.core.collect import Collector
     from openhound.core.preproc import PreProcessor
 

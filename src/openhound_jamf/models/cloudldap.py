@@ -14,6 +14,7 @@ class LDAPServer(BaseModel):
     @field_validator("id", mode="before")
     @classmethod
     def normalize_id(cls, value):
+        """Convert integer LDAP server IDs to strings before field validation."""
         return str(value) if isinstance(value, int) else value
 
 
@@ -30,10 +31,15 @@ class CloudUserResult(BaseModel):
     @field_validator("server_id", mode="before")
     @classmethod
     def normalize_server_id(cls, value):
+        """Convert integer provider IDs to strings before field validation."""
         return str(value) if isinstance(value, int) else value
 
     @model_validator(mode="after")
     def consistent_identity(self):
+        """Require a returned user ID to match its UUID when both are present.
+
+        Return this result, or raise ValueError when the two identifiers disagree.
+        """
         if self.id is not None and self.id != self.uuid:
             raise ValueError("Cloud directory id and uuid disagree")
         return self
@@ -47,6 +53,11 @@ class CloudUserResponse(BaseModel):
 
     @model_validator(mode="after")
     def complete_results(self):
+        """Require the reported user count to match the returned result count.
+
+        Return this response, or raise ValueError for incomplete or inconsistent
+        search results so they cannot be used as identity-matching evidence.
+        """
         if self.total_count != len(self.results):
             raise ValueError("Cloud directory search returned an incomplete result set")
         return self
@@ -79,11 +90,17 @@ class CloudGroupResult(BaseModel):
     @field_validator("id", "server_id", mode="before")
     @classmethod
     def normalize_id(cls, value):
+        """Convert integer group and provider IDs to strings before field validation."""
         return str(value) if isinstance(value, int) else value
 
     @model_validator(mode="after")
     def consistent_identity(self):
         # Jamf's generic id can be a group name; uuid identifies the Azure object.
+        """Validate UUID-shaped group IDs against the returned UUID.
+
+        Allow non-UUID generic IDs because Jamf may return the group name in id.
+        Raise ValueError when a UUID-shaped ID conflicts with the group's UUID.
+        """
         if self.id is not None:
             try:
                 object_id = UUID(self.id)
@@ -102,6 +119,11 @@ class CloudGroupResponse(BaseModel):
 
     @model_validator(mode="after")
     def complete_results(self):
+        """Require the reported group count to match the returned result count.
+
+        Return this response, or raise ValueError for incomplete or inconsistent
+        search results so they cannot be used as group-matching evidence.
+        """
         if self.total_count != len(self.results):
             raise ValueError(
                 "Cloud directory group search returned an incomplete result set"
@@ -123,6 +145,12 @@ class CloudGroupTest(BaseModel):
 
 
 def normalize_ldap_servers(value):
+    """Normalize the API's missing, single, or multiple LDAP server associations.
+
+    Return an empty list for null or empty-object input, wrap a single object
+    in a list, and remove null or empty-object entries from lists. Leave other
+    input types unchanged so model validation can reject malformed values.
+    """
     if value is None or value == {}:
         return []
     if isinstance(value, dict):

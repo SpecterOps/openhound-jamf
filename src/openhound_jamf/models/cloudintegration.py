@@ -124,6 +124,11 @@ class AzureServerConfiguration(AzureConfigurationModel):
 
 
 def _primitive_property(value):
+    """Return whether a value is a supported OpenGraph property value.
+
+    Accept strings, booleans, integers, finite floats, and homogeneous arrays
+    of primitives, allowing integers and floats in the same numeric array.
+    """
     if type(value) in (str, bool, int):
         return True
     if type(value) is float:
@@ -141,6 +146,12 @@ def flatten_cloud_properties(payload: dict) -> dict:
     result = {}
 
     def visit(value, path):
+        """Flatten a property subtree while rejecting collisions and unsupported leaves.
+
+        Normalize path components to lowercase underscore-separated keys, omit
+        null leaves, and raise ValueError for reserved or duplicate property names
+        or values that cannot be represented as OpenGraph properties.
+        """
         if isinstance(value, dict):
             for key, child in value.items():
                 key = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", key)
@@ -165,6 +176,12 @@ class AzureCloudConfiguration(AzureConfigurationModel):
 
     @model_validator(mode="after")
     def valid_azure_configuration(self):
+        """Validate the Azure provider identity and flattened property representation.
+
+        Return this configuration, or raise ValueError if the provider is not
+        Azure, the common and server IDs disagree, or properties cannot be
+        flattened without collisions or unsupported values.
+        """
         if self.cloud_idp_common.provider_name != "AZURE":
             raise ValueError("Cloud configuration is not an Azure provider")
         if self.cloud_idp_common.id != self.server.id:
@@ -187,6 +204,11 @@ class CloudIntegrationProperties(PydanticProperties):
 
     @model_validator(mode="after")
     def valid_extra_properties(self):
+        """Reject reserved names or unsupported non-null extra property values.
+
+        Return the properties unchanged after validation. Null values remain
+        available to the serializer, which omits them from the exported node.
+        """
         for key, value in (self.__pydantic_extra__ or {}).items():
             if key == "objectid" or (
                 value is not None and not _primitive_property(value)
@@ -196,6 +218,7 @@ class CloudIntegrationProperties(PydanticProperties):
 
     @model_serializer(mode="wrap")
     def omit_null_properties(self, handler):
+        """Serialize the node properties while omitting top-level null values."""
         return {key: value for key, value in handler(self).items() if value is not None}
 
 
@@ -205,11 +228,13 @@ class CloudIntegrationNode(PydanticNode):
 
     @classmethod
     def guid(cls, name, node_type, *args):
+        """Generate an uppercase, tenant-scoped Jamf graph ID using the shared algorithm."""
         return JAMFNode.guid(name, node_type, *args)
 
     @computed_field
     @property
     def id(self) -> str:
+        """Return the graph ID persisted during cloud integration collection."""
         return self.graph_id
 
 
@@ -250,6 +275,12 @@ class CloudIntegrationAsset(JAMFAsset):
 
     @model_validator(mode="after")
     def consistent_identity(self):
+        """Validate the persisted graph identity against the Jamf provider and tenant.
+
+        Allow summary-only Azure assets when detail collection failed. When
+        details exist, require matching provider IDs and non-colliding property
+        paths. Raise ValueError for inconsistent identities or invalid properties.
+        """
         if self.summary.provider_name != "AZURE":
             raise ValueError("Only Azure cloud integration nodes are supported")
         expected = JAMFNode.guid(self.summary.id, nk.CLOUD_INTEGRATION, self.tenant)
@@ -274,6 +305,12 @@ class CloudIntegrationAsset(JAMFAsset):
 
     @property
     def as_node(self):
+        """Build an OpenGraph node from the collected provider summary and details.
+
+        Reuse the persisted graph ID, flatten available configuration properties,
+        and include collection status. Raise ValueError if summary and detail
+        property paths collide.
+        """
         properties = self.summary.model_dump(mode="json")
         if self.details is not None:
             detailed = flatten_cloud_properties(
@@ -301,6 +338,13 @@ class CloudIntegrationAsset(JAMFAsset):
 
     @property
     def edges(self):
+        """Return non-traversable links to the Jamf tenant and configured Azure tenant.
+
+        Always connect the Jamf tenant to this integration, including disabled
+        providers. When details contain a valid tenant UUID, match AZTenant by
+        objectid. Otherwise log the skipped Azure link and retain the Jamf link.
+        No API requests are made during edge generation.
+        """
         edges = [
             Edge(
                 kind=ek.CLOUD_INTEGRATION_LINK,

@@ -63,6 +63,12 @@ class SourceContext:
 
     def cloud_snapshot(self) -> CloudIntegrationSnapshot:
         # Resources run in parallel: share one complete provider snapshot per run.
+        """Return one complete cloud-provider snapshot shared by parallel resources.
+
+        Serialize initial enumeration with a lock and cache either its result or
+        its exception. Subsequent calls reuse the snapshot or re-raise the cached
+        collection error rather than making another enumeration request.
+        """
         with self._cloud_lock:
             if self._cloud_error is not None:
                 raise self._cloud_error
@@ -75,6 +81,22 @@ class SourceContext:
             return self._cloud_snapshot
 
     def account_cloud_tests(self, account: dict) -> list[dict]:
+        """Collect directory search evidence for a Jamf directory account.
+
+        Args:
+            account: Account details containing its name, directory-user flag,
+                and optional LDAP server associations.
+
+        Returns:
+            Serialized search evidence for associated, enabled providers, or an
+            empty list when none are eligible. Azure providers receive test-user
+            POSTs; unsupported providers produce evidence without a search.
+            Individual search failures are logged and retained as error evidence.
+
+        Raises:
+            Exception: If the shared cloud-provider snapshot cannot be collected.
+            ValidationError: If an LDAP server association is malformed.
+        """
         if not account.get("directory_user"):
             return []
         associations = [
@@ -131,6 +153,11 @@ class SourceContext:
         return tests
 
     def log_unsupported_provider(self, provider: CloudIntegration) -> None:
+        """Log an unsupported provider once per collection, shared across resources.
+
+        Protect the logged-provider set with the cloud lock so concurrent account,
+        group, and configuration resources do not duplicate warnings.
+        """
         with self._cloud_lock:
             if provider.id not in self._unsupported_logged:
                 message = (
@@ -142,6 +169,23 @@ class SourceContext:
                 self._unsupported_logged.add(provider.id)
 
     def group_cloud_tests(self, group: dict) -> list[dict]:
+        """Collect directory search evidence for a Jamf directory group.
+
+        Args:
+            group: Group details containing its name and optional LDAP server
+                associations.
+
+        Returns:
+            Serialized evidence for associated, enabled providers, or an empty
+            list when no associations or enabled integrations exist. Azure
+            providers receive test-group POSTs; unsupported providers produce
+            evidence without a search. Individual failures are logged and saved
+            as error evidence without discarding the group.
+
+        Raises:
+            Exception: If the shared cloud-provider snapshot cannot be collected.
+            ValidationError: If an LDAP server association is malformed.
+        """
         associations = [
             LDAPServer.model_validate(item)
             for item in normalize_ldap_servers(

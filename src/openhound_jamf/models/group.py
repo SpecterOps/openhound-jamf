@@ -246,6 +246,7 @@ class Group(JAMFAsset):
     @field_validator("ldap_server", mode="before")
     @classmethod
     def _normalize_ldap_servers(cls, value):
+        """Normalize missing, single, or multiple group LDAP associations for validation."""
         return normalize_ldap_servers(value)
 
     @field_validator("site", mode="before")
@@ -255,6 +256,11 @@ class Group(JAMFAsset):
 
     @property
     def as_node(self):
+        """Build the Jamf group node with its privileges and directory-group flag.
+
+        Set directory_group from the presence of LDAP server associations. Assign
+        Tier 0 to full-access administrators and Tier 1 to other groups.
+        """
         tier_eval = (
             self.privilege_set == "Administrator" and self.access_level == "Full Access"
         )
@@ -329,6 +335,7 @@ class Group(JAMFAsset):
 
     @property
     def _admin_to_site_edges(self):
+        """Yield site administration when an administrator group has a valid site scope."""
         if (
             self.access_level == "Site Access"
             and self.privilege_set == "Administrator"
@@ -611,6 +618,11 @@ class Group(JAMFAsset):
 
     @property
     def _ldap_match_edges(self):
+        """Yield traversable Azure group matches for this directory-backed Jamf group.
+
+        Use preprocessed lookup evidence, matching AZGroup.objectid to each Azure
+        UUID and the destination to this group's generated graph ID.
+        """
         if not self.ldap_server:
             return
         for azure_object_id in self._lookup.ldap_match_group_ids(self.id):
@@ -628,6 +640,7 @@ class Group(JAMFAsset):
 
     @property
     def edges(self):
+        """Yield the group containment, privilege, SSO, and directory-matching edges."""
         yield from self._contains_edge
         yield from self._member_of_edges
         yield from self._admin_to_edge

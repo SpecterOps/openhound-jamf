@@ -24,6 +24,7 @@ OTHER_ID = "22222222-2222-4222-8222-222222222222"
 
 
 def provider(id="1002", enabled=True, kind="AZURE"):
+    """Build a synthetic provider summary with configurable identity, state, and kind."""
     return dict(
         id=id,
         displayName="Directory",
@@ -34,6 +35,7 @@ def provider(id="1002", enabled=True, kind="AZURE"):
 
 
 def result(uuid=USER_ID, email="user@example.com", server="1002"):
+    """Build a synthetic user search result with email and provider-bound UUIDs."""
     return dict(
         id=uuid,
         uuid=uuid,
@@ -43,6 +45,7 @@ def result(uuid=USER_ID, email="user@example.com", server="1002"):
 
 
 def account(**overrides):
+    """Build Jamf directory account details with synthetic identity and LDAP association."""
     return dict(
         id=45,
         name="testu",
@@ -58,6 +61,7 @@ def account(**overrides):
 
 
 def context(providers=None, results=None):
+    """Build a source context whose provider and user-search responses are mocked."""
     providers = [provider()] if providers is None else providers
     results = [result()] if results is None else results
     client = MagicMock()
@@ -73,6 +77,7 @@ def context(providers=None, results=None):
 
 
 def evidence(results, **overrides):
+    """Build validated user search evidence with optional field overrides."""
     values = dict(
         provider_id="1002",
         provider_name="AZURE",
@@ -87,6 +92,7 @@ def evidence(results, **overrides):
 
 @pytest.mark.parametrize("association", [None, {}, [], [{"id": 1002}], {"id": 1002}])
 def test_account_association_normalization(association):
+    """Verify missing, single, and list LDAP associations normalize for account validation."""
     values = account()
     values["ldap_server"] = association
     parsed = Account.model_validate(values)
@@ -94,6 +100,7 @@ def test_account_association_normalization(association):
 
 
 def test_plural_association_alias_and_missing_key():
+    """Verify absent associations default empty and the plural LDAP alias accepts lists."""
     values = account()
     del values["ldap_server"]
     assert Account.model_validate(values).ldap_server == []
@@ -105,6 +112,7 @@ def test_plural_association_alias_and_missing_key():
 
 
 def test_azure_search_body_and_shared_snapshot():
+    """Verify user searches send the username and parallel resources share one snapshot."""
     ctx = context()
     tests = ctx.account_cloud_tests(account())
     assert tests[0]["status"] == "success"
@@ -128,6 +136,7 @@ def test_azure_search_body_and_shared_snapshot():
     ],
 )
 def test_ineligible_accounts_do_not_post(change, providers):
+    """Verify local accounts and missing, disabled, or unrelated providers skip searches."""
     ctx = context(providers)
     values = account()
     values.update(change)
@@ -136,17 +145,16 @@ def test_ineligible_accounts_do_not_post(change, providers):
 
 
 def test_google_logs_once_and_never_posts(caplog):
+    """Verify Google lookups emit one unsupported warning and no search POSTs."""
     ctx = context([provider(kind="GOOGLE")])
     for _ in range(2):
         assert ctx.account_cloud_tests(account())[0]["status"] == "unsupported"
     ctx.client.post.assert_not_called()
-    assert (
-        caplog.text.count("Google cloud integrations are unsupported.")
-        == 1
-    )
+    assert caplog.text.count("Google cloud integrations are unsupported.") == 1
 
 
 def test_each_associated_azure_provider_is_queried():
+    """Verify each associated Azure provider is queried with provider-bound responses."""
     ctx = context([provider(), provider(id="1003")])
     # Separate responses preserve the provider binding on each returned identity.
     first, second = MagicMock(), MagicMock()
@@ -164,6 +172,7 @@ def test_each_associated_azure_provider_is_queried():
 
 @pytest.mark.parametrize("failure", ["http", "uuid", "provider", "count", "identity"])
 def test_invalid_or_failed_search_is_error_evidence(failure):
+    """Verify HTTP errors and invalid user responses produce unusable error evidence."""
     ctx = context()
     payload = {"totalCount": 1, "results": [result()]}
     if failure == "http":
@@ -203,10 +212,12 @@ def test_invalid_or_failed_search_is_error_evidence(failure):
     ],
 )
 def test_resolution_rules(results, email, expected):
+    """Verify single-result, email-based, empty, and duplicate user resolution rules."""
     assert matched_cloud_users(evidence(results), email) == expected
 
 
 def test_zero_search_result_is_success():
+    """Verify an empty directory search is valid evidence rather than an API failure."""
     assert context(results=[]).account_cloud_tests(account())[0]["status"] == "success"
 
 
@@ -222,6 +233,7 @@ def test_zero_search_result_is_success():
     ],
 )
 def test_preprocessing_rejects_ineligible_evidence(change):
+    """Verify preprocessing excludes local, disabled, unassociated, or invalid user evidence."""
     values = account()
     test = evidence([result()]).model_dump(mode="json")
     providers = [provider()]
@@ -243,6 +255,7 @@ def test_preprocessing_rejects_ineligible_evidence(change):
 
 
 def lookup_db(values, tests, providers=None):
+    """Create an in-memory lookup database containing synthetic account and search evidence."""
     con = duckdb.connect()
     con.execute("CREATE SCHEMA jamf")
     con.execute(
@@ -282,6 +295,7 @@ def lookup_db(values, tests, providers=None):
 
 
 def test_preprocessing_and_edge_identity_deduplicate_matches():
+    """Verify duplicate evidence produces one traversable Azure-to-Jamf account edge."""
     values = account()
     test = evidence([result()]).model_dump(mode="json")
     with lookup_db(values, [test, test]) as con:
@@ -304,6 +318,7 @@ def test_preprocessing_and_edge_identity_deduplicate_matches():
 
 
 def test_search_requires_complete_response():
+    """Verify a user response with a mismatched result count fails validation."""
     with pytest.raises(ValidationError):
         CloudUserResponse.model_validate({"totalCount": 2, "results": [result()]})
 
@@ -313,6 +328,7 @@ def test_search_requires_complete_response():
 def test_collect_preprocess_convert_offline(
     tmp_path, monkeypatch, mock_jamf_api, outcome
 ):
+    """Verify the mocked account pipeline emits matching edges without conversion API calls."""
     from openhound.core.collect import Collector
     from openhound.core.convert import Converter
     from openhound.core.preproc import PreProcessor
@@ -348,6 +364,7 @@ def test_collect_preprocess_convert_offline(
     )
 
     def selected_source():
+        """Select account details, tenant, and provider summaries for the pipeline test."""
         return source(credentials=credentials).with_resources(
             "account_details", "tenant", "cloud_integrations"
         )

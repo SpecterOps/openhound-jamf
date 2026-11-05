@@ -254,6 +254,7 @@ class Account(JAMFAsset):
     @field_validator("ldap_server", mode="before")
     @classmethod
     def _normalize_ldap_servers(cls, value):
+        """Normalize missing, single, or multiple account LDAP associations for validation."""
         return normalize_ldap_servers(value)
 
     @field_validator("site", mode="before")
@@ -263,7 +264,11 @@ class Account(JAMFAsset):
 
     @property
     def as_node(self):
+        """Build the Jamf account node with its privileges and directory-user flag.
 
+        Assign Tier 0 to full-access administrators and Tier 1 to other accounts.
+        Preserve the API's directory_user value as the exported boolean property.
+        """
         tier_eval = (
             self.privilege_set == "Administrator" and self.access_level == "Full Access"
         )
@@ -321,6 +326,11 @@ class Account(JAMFAsset):
 
     @property
     def _ldap_match_edges(self):
+        """Yield traversable Azure user matches for this enabled directory account.
+
+        Use preprocessed lookup evidence, matching AZUser.objectid to each Azure
+        UUID and the destination to this account's generated graph ID.
+        """
         if not self.directory_user or self.enabled != "Enabled":
             return
         for azure_object_id in self._lookup.ldap_match_user_ids(self.id):
@@ -639,6 +649,7 @@ class Account(JAMFAsset):
 
     @property
     def edges(self):
+        """Yield the account containment, privilege, SSO, and identity-matching edges."""
         yield from self._admin_to_edge
         yield from self._admin_to_site_edges
         yield from self._contains_edge

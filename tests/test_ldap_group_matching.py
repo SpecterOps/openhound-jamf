@@ -24,6 +24,7 @@ GROUP_NAME = "Example Directory Group"
 
 
 def provider(id="201", enabled=True, kind="AZURE"):
+    """Build a synthetic provider summary with configurable identity, state, and kind."""
     return dict(
         id=id,
         displayName="Example Provider",
@@ -34,10 +35,12 @@ def provider(id="201", enabled=True, kind="AZURE"):
 
 
 def result(uuid=GROUP_ID, name=GROUP_NAME, server="201"):
+    """Build a synthetic group search result bound to the specified provider."""
     return dict(id=uuid, uuid=uuid, serverId=server, name=name)
 
 
 def group():
+    """Build Jamf directory group details associated with the synthetic provider."""
     return dict(
         id=1,
         name=GROUP_NAME,
@@ -48,6 +51,7 @@ def group():
 
 
 def context(providers=None, results=None):
+    """Build a source context whose provider and group-search responses are mocked."""
     providers = [provider()] if providers is None else providers
     results = [result()] if results is None else results
     client = MagicMock()
@@ -63,6 +67,7 @@ def context(providers=None, results=None):
 
 
 def evidence(results, **overrides):
+    """Build validated group search evidence with optional field overrides."""
     values = dict(
         provider_id="201",
         provider_name="AZURE",
@@ -76,6 +81,7 @@ def evidence(results, **overrides):
 
 
 def test_group_search_uses_displayname_and_cached_snapshot():
+    """Verify group searches POST the display name and reuse provider enumeration."""
     ctx = context()
     assert ctx.group_cloud_tests(group())[0]["status"] == "success"
     ctx.client.post.assert_called_once_with(
@@ -97,6 +103,7 @@ def test_group_search_uses_displayname_and_cached_snapshot():
     ],
 )
 def test_ineligible_groups_never_post(servers, providers):
+    """Verify missing associations, disabled providers, and unrelated providers skip searches."""
     ctx = context(providers)
     values = group()
     values["ldap_server"] = servers
@@ -105,6 +112,7 @@ def test_ineligible_groups_never_post(servers, providers):
 
 
 def test_false_tenant_flag_blocks_group_search():
+    """Verify a disabled tenant integration flag prevents group search POSTs."""
     ctx = context()
     ctx._cloud_snapshot = CloudIntegrationSnapshot(
         total_count=1, results=[provider()], cloudintegrationenabled=False
@@ -114,19 +122,18 @@ def test_false_tenant_flag_blocks_group_search():
 
 
 def test_google_logging_is_shared_with_account_searches(caplog):
+    """Verify user and group searches share one Google warning and never POST to it."""
     ctx = context([provider(kind="GOOGLE")])
     for _ in range(2):
         assert ctx.group_cloud_tests(group())[0]["status"] == "unsupported"
     values = group() | {"directory_user": True}
     ctx.account_cloud_tests(values)
-    assert (
-        caplog.text.count("Google cloud integrations are unsupported.")
-        == 1
-    )
+    assert caplog.text.count("Google cloud integrations are unsupported.") == 1
     ctx.client.post.assert_not_called()
 
 
 def test_multiple_associated_providers_are_tested():
+    """Verify group searches query each associated enabled provider with bound results."""
     ctx = context([provider(), provider(id="202")])
     first, second = MagicMock(), MagicMock()
     first.json.return_value = {"totalCount": 1, "results": [result()]}
@@ -144,6 +151,7 @@ def test_multiple_associated_providers_are_tested():
     "failure", ["http", "uuid", "identity", "server", "incomplete"]
 )
 def test_failed_search_produces_error_evidence(failure):
+    """Verify HTTP errors and invalid group responses produce unusable error evidence."""
     ctx = context()
     payload = {"totalCount": 1, "results": [result()]}
     if failure == "http":
@@ -187,10 +195,12 @@ def test_failed_search_produces_error_evidence(failure):
     ],
 )
 def test_group_matching_rules(results, name, expected):
+    """Verify single-result, name-based, empty, and duplicate group resolution rules."""
     assert matched_cloud_groups(evidence(results), name) == expected
 
 
 def test_generic_id_may_be_group_name_but_uuid_is_used():
+    """Verify group names are allowed as generic IDs while UUIDs identify Azure groups."""
     payload = {"totalCount": 1, "results": [{**result(), "id": GROUP_NAME}]}
     parsed = CloudGroupResponse.model_validate(payload)
     assert str(parsed.results[0].uuid) == GROUP_ID
@@ -203,6 +213,7 @@ def test_generic_id_may_be_group_name_but_uuid_is_used():
     ["none", "unassociated", "disabled", "tenant_disabled", "wrong_name", "error"],
 )
 def test_preprocessing_and_edge_binding(change):
+    """Verify preprocessing filters ineligible evidence and emits deduplicated group edges."""
     values = group()
     test = evidence([result()]).model_dump(mode="json")
     providers = [provider(enabled=change != "disabled")]
@@ -254,6 +265,7 @@ def test_preprocessing_and_edge_binding(change):
 
 
 def test_old_collections_create_empty_lookup_table(caplog):
+    """Verify collections lacking group search evidence produce an empty lookup and warning."""
     with duckdb.connect() as con:
         con.execute("CREATE SCHEMA jamf")
         con.execute("CREATE TABLE jamf.account_group_details (id BIGINT)")
@@ -267,6 +279,7 @@ def test_old_collections_create_empty_lookup_table(caplog):
 def test_group_collection_preprocessing_and_conversion(
     tmp_path, monkeypatch, mock_jamf_api, outcome
 ):
+    """Verify the mocked group pipeline emits matching edges without conversion API calls."""
     from openhound.core.collect import Collector
     from openhound.core.convert import Converter
     from openhound.core.preproc import PreProcessor
@@ -297,6 +310,7 @@ def test_group_collection_preprocessing_and_conversion(
     )
 
     def selected_source():
+        """Select group details, provider summaries, and tenant data for the pipeline test."""
         return source(credentials=credentials).with_resources(
             "account_group_details", "cloud_integrations", "tenant"
         )

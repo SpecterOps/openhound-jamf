@@ -26,6 +26,7 @@ SAMPLE = Path(__file__).parent / "test_data" / "v1" / "cloud-azure.json"
 
 
 def summary(id="201", enabled=True, kind="AZURE"):
+    """Build a synthetic provider summary with configurable identity, state, and kind."""
     return dict(
         id=id,
         displayName="Example Azure Provider",
@@ -36,10 +37,12 @@ def summary(id="201", enabled=True, kind="AZURE"):
 
 
 def detail():
+    """Load a fresh copy of the synthetic Azure configuration fixture."""
     return json.loads(SAMPLE.read_text())
 
 
 def asset(details=True, **overrides):
+    """Build a validated provider asset with optional details and field overrides."""
     values = dict(
         summary=summary(),
         details=detail() if details is True else None if details is False else details,
@@ -51,6 +54,7 @@ def asset(details=True, **overrides):
 
 
 def test_every_sample_property_is_preserved_and_flattened():
+    """Verify provider properties are flattened and exported with stable graph metadata."""
     node = asset().as_node.model_dump(mode="json")
     expected = {
         "id": "201",
@@ -104,6 +108,7 @@ def test_every_sample_property_is_preserved_and_flattened():
 
 
 def test_identity_is_stable_across_rename_and_distinct_across_tenants_and_kinds():
+    """Verify graph identity survives renames and serialization without cross-scope collisions."""
     original = asset()
     renamed = asset(summary=summary() | {"displayName": "Renamed"})
     assert original.as_node.id == renamed.as_node.id
@@ -117,6 +122,7 @@ def test_identity_is_stable_across_rename_and_distinct_across_tenants_and_kinds(
 
 @pytest.mark.parametrize("enabled", [True, False])
 def test_cloud_links_target_jamf_ids_and_azure_objectid(enabled):
+    """Verify enabled and disabled assets link Jamf IDs to Azure objectid non-traversably."""
     payload = detail()
     payload["server"]["tenantId"] = "abcdef12-3456-4789-abcd-123456789abc"
     payload["server"]["enabled"] = enabled
@@ -154,6 +160,7 @@ def test_cloud_links_target_jamf_ids_and_azure_objectid(enabled):
 
 @pytest.mark.parametrize("tenant_id", [None, "", "not-a-uuid", "/TENANTS/invalid"])
 def test_unavailable_azure_identity_retains_jamf_link(tenant_id, caplog):
+    """Verify missing or invalid Azure identity skips only the Azure link with a warning."""
     if tenant_id is None:
         integration = asset(details=False, details_error="HTTPError")
     else:
@@ -168,6 +175,7 @@ def test_unavailable_azure_identity_retains_jamf_link(tenant_id, caplog):
 
 
 def test_cloud_link_schema_is_registered_and_non_traversable():
+    """Verify the integration relationship is non-traversable and kind names are unique."""
     schema_file = Path(__file__).parents[1] / "extension" / "schema.json"
     schema = json.loads(schema_file.read_text())
     relationship = next(
@@ -186,6 +194,7 @@ def test_cloud_link_schema_is_registered_and_non_traversable():
 
 @pytest.mark.parametrize("change", ["graph", "server", "common", "provider"])
 def test_inconsistent_source_identity_is_rejected(change):
+    """Verify mismatched graph, server, common, or provider identities fail validation."""
     values = asset().model_dump(mode="json")
     if change == "graph":
         values["graph_id"] = "invalid"
@@ -201,6 +210,7 @@ def test_inconsistent_source_identity_is_rejected(change):
 
 
 def test_nulls_are_omitted_and_false_zero_empty_strings_are_preserved():
+    """Verify serialization omits nulls while retaining valid false, zero, and empty values."""
     payload = detail()
     payload["server"]["migrated"] = None
     payload["server"]["searchTimeout"] = 0
@@ -222,11 +232,13 @@ def test_nulls_are_omitted_and_false_zero_empty_strings_are_preserved():
 
 @pytest.mark.parametrize("value", [[{"id": "x"}], [True, "x"], [["x"]], float("inf")])
 def test_unsupported_graph_values_are_rejected(value):
+    """Verify nested, mixed-type, and non-finite property values are rejected."""
     with pytest.raises(ValueError):
         flatten_cloud_properties({"setting": value})
 
 
 def test_flattening_detects_collisions_and_reserved_names():
+    """Verify flattening rejects conflicting paths and reserved property names."""
     with pytest.raises(ValueError):
         flatten_cloud_properties({"userName": "a", "user_name": "b"})
     with pytest.raises(ValueError):
@@ -239,6 +251,7 @@ def test_flattening_detects_collisions_and_reserved_names():
 
 @pytest.mark.parametrize("failure", [None, "http", "identity", "type"])
 def test_collection_retains_provider_when_details_fail(failure):
+    """Verify detail collection failures preserve the provider summary and graph identity."""
     client = MagicMock()
     listing, detailed = MagicMock(), MagicMock()
     listing.json.return_value = {"totalCount": 1, "results": [summary(enabled=False)]}
@@ -264,6 +277,7 @@ def test_collection_retains_provider_when_details_fail(failure):
 
 
 def test_google_is_logged_once_without_creating_nodes(caplog):
+    """Verify unsupported Google providers are logged once and create no graph assets."""
     client = MagicMock()
     client.get.return_value.json.return_value = {
         "totalCount": 1,
@@ -281,6 +295,7 @@ def test_google_is_logged_once_without_creating_nodes(caplog):
 def test_provider_node_collect_preprocess_convert(
     tmp_path, monkeypatch, mock_jamf_api, outcome
 ):
+    """Verify mocked collection through conversion preserves provider nodes and links offline."""
     from openhound.core.collect import Collector
     from openhound.core.convert import Converter
     from openhound.core.preproc import PreProcessor
@@ -309,6 +324,7 @@ def test_provider_node_collect_preprocess_convert(
     )
 
     def selected_source():
+        """Select provider summaries, Azure details, and tenant resources for this pipeline test."""
         return source(credentials=credentials).with_resources(
             "cloud_integrations", "cloud_integration_details", "tenant"
         )

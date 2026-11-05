@@ -9,6 +9,7 @@ from openhound_jamf.models.group import Group
 
 
 def make_group(**extra):
+    """Build a synthetic Jamf group with a mocked tenant lookup and field overrides."""
     group = Group(
         id=10,
         name="Test Directory Group",
@@ -36,6 +37,7 @@ def make_group(**extra):
     ],
 )
 def test_directory_group_export(extra, expected):
+    """Verify normalized LDAP associations determine the exported directory-group boolean."""
     group = make_group(**extra)
     # The normalized collection representation must survive conversion too.
     restored = Group.model_validate(group.model_dump(mode="json"))
@@ -48,5 +50,6 @@ def test_directory_group_export(extra, expected):
 
 @pytest.mark.parametrize("value", ["invalid", [{"name": "Missing ID"}], [42]])
 def test_malformed_directory_associations_are_rejected(value):
+    """Verify invalid LDAP association shapes or missing IDs fail group validation."""
     with pytest.raises(ValidationError):
         make_group(ldap_server=value)

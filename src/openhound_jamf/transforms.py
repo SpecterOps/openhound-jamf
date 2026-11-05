@@ -35,6 +35,7 @@ def cloud_ldap_matches(con, schema: str = "jamf") -> None:
         return
 
     def decode(value):
+        """Decode a stored JSON string, leaving already-decoded database values unchanged."""
         return json.loads(value) if isinstance(value, str) else value
 
     snapshots = con.execute(
@@ -132,6 +133,7 @@ def cloud_ldap_group_matches(con, schema: str = "jamf") -> None:
         return
 
     def decode(value):
+        """Decode a stored JSON string, leaving already-decoded database values unchanged."""
         return json.loads(value) if isinstance(value, str) else value
 
     snapshots = con.execute(
@@ -305,6 +307,12 @@ def policy_target_computers(con, schema: str = "jamf") -> None:
 
 
 def transforms(con: duckdb.DuckDBPyConnection, schema: str = "jamf") -> None:
+    """Build the derived Jamf lookup tables used during OpenGraph conversion.
+
+    Resolve saved user and group search evidence, expand principal privileges,
+    and derive recurring-script policy targets within the supplied schema.
+    Operate on collected data without issuing Jamf API requests.
+    """
     cloud_ldap_matches(con, schema)
     cloud_ldap_group_matches(con, schema)
     account_privileges(con, schema)

@@ -129,6 +129,7 @@ class JamfLookup(LookupManager):
 
     @lru_cache
     def ldap_match_user_ids(self, account_id: int) -> list[str]:
+        """Return distinct Azure object IDs matched to the given Jamf account."""
         rows = self.client.execute(
             f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_matches WHERE account_id = ?",
             [account_id],
@@ -137,6 +138,7 @@ class JamfLookup(LookupManager):
 
     @lru_cache
     def ldap_match_group_ids(self, group_id: int) -> list[str]:
+        """Return distinct Azure object IDs matched to the given Jamf group."""
         rows = self.client.execute(
             f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_group_matches WHERE group_id = ?",
             [group_id],

@@ -30,6 +30,11 @@ def _page_payload(relative_path: str, page: int | None):
 
 @pytest.fixture
 def mock_jamf_api() -> Any:
+    """Provide an in-process Jamf API with configurable directory search responses.
+
+    Expose response overrides and a request log through app.state so tests can
+    exercise collection and failures without contacting a live Jamf tenant.
+    """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -62,6 +67,7 @@ def mock_jamf_api() -> Any:
 
     @app.post("/api/v1/cloud-idp/{provider_id}/test-user")
     async def cloud_user_test(provider_id: str, request: Request):
+        """Record the user search request and return the configured payload and status."""
         from fastapi.responses import JSONResponse
 
         payload = await request.json()
@@ -77,6 +83,7 @@ def mock_jamf_api() -> Any:
 
     @app.post("/api/v1/cloud-idp/{provider_id}/test-group")
     async def cloud_group_test(provider_id: str, request: Request):
+        """Record the group search request and return the configured payload and status."""
         from fastapi.responses import JSONResponse
 
         payload = await request.json()
@@ -91,6 +98,7 @@ def mock_jamf_api() -> Any:
 
     @app.get("/api/v1/cloud-azure/{provider_id}")
     async def cloud_azure_details(provider_id: str):
+        """Return Azure configuration fixtures with provider-specific values or overrides."""
         from fastapi.responses import JSONResponse
 
         app.state.calls.append("cloud_azure_details")
@@ -147,6 +155,7 @@ def mock_jamf_api() -> Any:
 
     @app.get("/JSSResource/accounts/groupid/{group_id}")
     async def account_group_details(group_id: int):
+        """Return overridden group details when configured, otherwise the fixture payload."""
         app.state.calls.append("account_group_details")
         if app.state.group_details_override is not None:
             return app.state.group_details_override
@@ -202,6 +211,7 @@ def mock_jamf_api() -> Any:
 
     @app.get("/api/v1/cloud-idp")
     async def cloud_idp(page: int = 0):
+        """Record provider enumeration and return the configured page of cloud providers."""
         app.state.calls.append("cloud_integrations")
         return app.state.cloud_idp_pages[page]
 
