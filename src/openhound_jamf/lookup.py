@@ -3,6 +3,8 @@ from functools import lru_cache
 from duckdb import DuckDBPyConnection
 from openhound.core.lookup import LookupManager
 
+from openhound_jamf.cloud_snapshot import cloud_snapshot_rows
+
 
 class JamfLookup(LookupManager):
     def __init__(self, client: DuckDBPyConnection, schema: str = "jamf"):
@@ -111,11 +113,11 @@ class JamfLookup(LookupManager):
 
     @lru_cache
     def cloud_integration_enabled(self) -> bool:
-        """Return a native boolean; missing collection evidence is an error."""
-        rows = self.client.execute(
-            f"SELECT cloudintegrationenabled FROM {self.schema}.cloud_integrations"
-        ).fetchall()
-        if len(rows) != 1:
+        """Return the collected enabled status, or false when no snapshot exists."""
+        rows = cloud_snapshot_rows(self.client, self.schema, "cloudintegrationenabled")
+        if not rows:
+            return False
+        if len(rows) > 1:
             raise RuntimeError(
                 "Expected one Cloud Identity Provider snapshot. "
                 "Run collection and preprocessing with cloud_integrations included."
