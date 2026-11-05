@@ -2,7 +2,7 @@
   "schema": {
     "name": "SOJamf",
     "display_name": "Jamf Extension (by SpecterOps)",
-    "version": "v1.1.2",
+    "version": "v1.1.3",
     "namespace": "jamf"
   },
   "node_kinds": [
@@ -85,9 +85,22 @@
       "is_display_kind": true,
       "icon": "address-card",
       "color": "#FFFFFF"
+    },
+    {
+      "name": "jamf_CloudIntegration",
+      "display_name": "Jamf Cloud Integration",
+      "description": "Represents a configured Azure cloud integration in the Jamf Pro tenant. When enabled, the cloud integration can perform lookups to map attributes matching Jamf directory service accounts or groups, making it a node with significant security implications.",
+      "is_display_kind": true,
+      "icon": "cloud-arrow-up",
+      "color": "#0078D4"
     }
   ],
   "relationship_kinds": [
+    {
+      "name": "jamf_CloudIntegrationLink",
+      "description": "Represents a cloud integration configuration within a Jamf Pro tenant and its connection to the configured cloud provider tenant.",
+      "is_traversable": false
+    },
     {
       "name": "jamf_Contains",
       "description": "Represents a structural containment relationship where the source node contains the target resource.",
@@ -236,6 +249,11 @@
     {
       "name": "jamf_Okta_Same_Device",
       "description": "Represents a hybrid cross-platform device correlation where the Jamf Pro registered computer's UDID matches the registered device UDID in Okta.",
+      "is_traversable": true
+    },
+    {
+      "name": "jamf_LDAPMatch",
+      "description": "The Azure directory user or group matched its corresponding Jamf directory account or group through its configured enabled LDAP or Cloud Identity Provider.",
       "is_traversable": true
     },
     {

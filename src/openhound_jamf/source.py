@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
+from threading import Lock
 from typing import Union
 from urllib.parse import urlsplit
 
@@ -11,6 +13,16 @@ from dlt.sources.helpers.rest_client.paginators import (
 
 from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
+from .graph import JAMFNode
+from .kinds import nodes as nk
+from .models.cloudldap import (
+    CloudGroupResponse,
+    CloudGroupTest,
+    CloudUserResponse,
+    CloudUserTest,
+    LDAPServer,
+    normalize_ldap_servers,
+)
 from .models import (
     SSO,
     Account,
@@ -21,6 +33,11 @@ from .models import (
     BasePolicy,
     BaseScript,
     BaseUser,
+    AzureCloudConfiguration,
+    CloudIntegration,
+    CloudIntegrationAsset,
+    CloudIntegrationResponse,
+    CloudIntegrationSnapshot,
     Computer,
     ComputerextensionAttribute,
     Group,
@@ -32,9 +49,197 @@ from .models import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class SourceContext:
     client: RESTClient
+    tenant_id: str | None = None
+    _cloud_snapshot: CloudIntegrationSnapshot | None = field(default=None, init=False)
+    _cloud_error: Exception | None = field(default=None, init=False)
+    _cloud_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _unsupported_logged: set[str] = field(default_factory=set, init=False)
+
+    def cloud_snapshot(self) -> CloudIntegrationSnapshot:
+        # Resources run in parallel: share one complete provider snapshot per run.
+        """Return one complete cloud-provider snapshot shared by parallel resources.
+
+        Serialize initial enumeration with a lock and cache either its result or
+        its exception. Subsequent calls reuse the snapshot or re-raise the cached
+        collection error rather than making another enumeration request.
+        """
+        with self._cloud_lock:
+            if self._cloud_error is not None:
+                raise self._cloud_error
+            if self._cloud_snapshot is None:
+                try:
+                    self._cloud_snapshot = fetch_cloud_integrations(self.client)
+                except Exception as error:
+                    self._cloud_error = error
+                    raise
+            return self._cloud_snapshot
+
+    def account_cloud_tests(self, account: dict) -> list[dict]:
+        """Collect directory search evidence for a Jamf directory account.
+
+        Args:
+            account: Account details containing its name, directory-user flag,
+                and optional LDAP server associations.
+
+        Returns:
+            Serialized search evidence for associated, enabled providers, or an
+            empty list when none are eligible. Azure providers receive test-user
+            POSTs; unsupported providers produce evidence without a search.
+            Individual search failures are logged and retained as error evidence.
+
+        Raises:
+            Exception: If the shared cloud-provider snapshot cannot be collected.
+            ValidationError: If an LDAP server association is malformed.
+        """
+        if not account.get("directory_user"):
+            return []
+        associations = [
+            LDAPServer.model_validate(item)
+            for item in normalize_ldap_servers(
+                account.get("ldap_server", account.get("ldap_servers"))
+            )
+        ]
+        if not associations:
+            return []
+        provider_ids = {server.id for server in associations}
+        tests = []
+        for provider in self.cloud_snapshot().results:
+            if provider.id not in provider_ids or not provider.enabled:
+                continue
+            evidence = dict(
+                provider_id=provider.id,
+                provider_name=provider.provider_name,
+                requested_username=account["name"],
+            )
+            if provider.provider_name != "AZURE":
+                self.log_unsupported_provider(provider)
+                test = CloudUserTest(**evidence, status="unsupported")
+            else:
+                try:
+                    response = self.client.post(
+                        f"/api/v1/cloud-idp/{provider.id}/test-user",
+                        json={"username": account["name"]},
+                    )
+                    response.raise_for_status()
+                    result = CloudUserResponse.model_validate(response.json())
+                    if any(user.server_id != provider.id for user in result.results):
+                        raise ValueError(
+                            "Cloud directory response belongs to another provider"
+                        )
+                    test = CloudUserTest(
+                        **evidence,
+                        status="success",
+                        total_count=result.total_count,
+                        results=result.results,
+                    )
+                except Exception as error:
+                    # Keep the principal even when its optional directory lookup fails.
+                    logger.warning(
+                        "Cloud directory lookup failed for account %s, provider %s: %s",
+                        account["id"],
+                        provider.id,
+                        type(error).__name__,
+                    )
+                    test = CloudUserTest(
+                        **evidence, status="error", error=type(error).__name__
+                    )
+            tests.append(test.model_dump(mode="json"))
+        return tests
+
+    def log_unsupported_provider(self, provider: CloudIntegration) -> None:
+        """Log an unsupported provider once per collection, shared across resources.
+
+        Protect the logged-provider set with the cloud lock so concurrent account,
+        group, and configuration resources do not duplicate warnings.
+        """
+        with self._cloud_lock:
+            if provider.id not in self._unsupported_logged:
+                message = (
+                    "Google cloud integrations are unsupported."
+                    if provider.provider_name == "GOOGLE"
+                    else "Cloud Integration provider not currently supported"
+                )
+                logger.warning(message, extra={"provider_id": provider.id})
+                self._unsupported_logged.add(provider.id)
+
+    def group_cloud_tests(self, group: dict) -> list[dict]:
+        """Collect directory search evidence for a Jamf directory group.
+
+        Args:
+            group: Group details containing its name and optional LDAP server
+                associations.
+
+        Returns:
+            Serialized evidence for associated, enabled providers, or an empty
+            list when no associations or enabled integrations exist. Azure
+            providers receive test-group POSTs; unsupported providers produce
+            evidence without a search. Individual failures are logged and saved
+            as error evidence without discarding the group.
+
+        Raises:
+            Exception: If the shared cloud-provider snapshot cannot be collected.
+            ValidationError: If an LDAP server association is malformed.
+        """
+        associations = [
+            LDAPServer.model_validate(item)
+            for item in normalize_ldap_servers(
+                group.get("ldap_server", group.get("ldap_servers"))
+            )
+        ]
+        if not associations:
+            return []
+        snapshot = self.cloud_snapshot()
+        if not snapshot.cloudintegrationenabled:
+            return []
+        provider_ids = {server.id for server in associations}
+        tests = []
+        for provider in snapshot.results:
+            if provider.id not in provider_ids or not provider.enabled:
+                continue
+            evidence = dict(
+                provider_id=provider.id,
+                provider_name=provider.provider_name,
+                requested_groupname=group["name"],
+            )
+            if provider.provider_name != "AZURE":
+                self.log_unsupported_provider(provider)
+                test = CloudGroupTest(**evidence, status="unsupported")
+            else:
+                try:
+                    response = self.client.post(
+                        f"/api/v1/cloud-idp/{provider.id}/test-group",
+                        json={"groupname": group["name"]},
+                    )
+                    response.raise_for_status()
+                    result = CloudGroupResponse.model_validate(response.json())
+                    if any(item.server_id != provider.id for item in result.results):
+                        raise ValueError(
+                            "Cloud directory group response belongs to another provider"
+                        )
+                    test = CloudGroupTest(
+                        **evidence,
+                        status="success",
+                        total_count=result.total_count,
+                        results=result.results,
+                    )
+                except Exception as error:
+                    logger.warning(
+                        "Cloud directory lookup failed for group %s, provider %s: %s",
+                        group["id"],
+                        provider.id,
+                        type(error).__name__,
+                    )
+                    test = CloudGroupTest(
+                        **evidence, status="error", error=type(error).__name__
+                    )
+            tests.append(test.model_dump(mode="json"))
+        return tests
 
 
 @app.resource(name="users", parallelized=True, columns=BaseUser)
@@ -87,7 +292,17 @@ def account_details(user, ctx: SourceContext):
         account (Account): The JAMF account including account details, parsed by the Pydantic Account model.
     """
     response = ctx.client.get(f"/JSSResource/accounts/userid/{user['id']}").json()
-    yield response["account"]
+    account = response["account"]
+    try:
+        account["cloud_idp_user_tests"] = ctx.account_cloud_tests(account)
+    except Exception as error:
+        logger.warning(
+            "Cloud directory enrichment failed for account %s: %s",
+            account["id"],
+            type(error).__name__,
+        )
+        account["cloud_idp_user_tests"] = []
+    yield account
 
 
 @app.resource(name="account_groups", parallelized=True, columns=BaseGroup)
@@ -118,7 +333,17 @@ def account_group_details(group, ctx: SourceContext):
         group (Group): The JAMF account group including group details, parsed by the Pydantic Group model.
     """
     response = ctx.client.get(f"/JSSResource/accounts/groupid/{group['id']}").json()
-    yield response["group"]
+    details = response["group"]
+    try:
+        details["cloud_idp_group_tests"] = ctx.group_cloud_tests(details)
+    except Exception as error:
+        logger.warning(
+            "Cloud directory enrichment failed for group %s: %s",
+            details["id"],
+            type(error).__name__,
+        )
+        details["cloud_idp_group_tests"] = []
+    yield details
 
 
 @app.resource(name="policies", parallelized=True, columns=BasePolicy)
@@ -264,6 +489,97 @@ def api_roles(ctx: SourceContext):
         yield role
 
 
+def fetch_cloud_integrations(client: RESTClient) -> CloudIntegrationSnapshot:
+    """Fetch a complete provider snapshot for all resources in this source run."""
+    integrations: list[CloudIntegration] = []
+    expected_total: int | None = None
+    page_number = 0
+
+    while True:
+        response = client.get(
+            "/api/v1/cloud-idp",
+            params={"page": page_number, "page-size": 100},
+        )
+        response.raise_for_status()
+        page = CloudIntegrationResponse.model_validate(response.json())
+
+        if expected_total is None:
+            expected_total = page.total_count
+        elif page.total_count != expected_total:
+            raise RuntimeError(
+                "Cloud Identity Provider count changed during collection; retry."
+            )
+
+        integrations.extend(page.results)
+        if len(integrations) == expected_total:
+            break
+        if not page.results or len(integrations) > expected_total:
+            raise RuntimeError(
+                "Cloud Identity Provider pagination returned an incomplete "
+                "or inconsistent collection."
+            )
+        page_number += 1
+
+    snapshot = CloudIntegrationSnapshot(
+        total_count=len(integrations),
+        results=integrations,
+        cloudintegrationenabled=any(item.enabled for item in integrations),
+    )
+    return snapshot
+
+
+@app.resource(
+    name="cloud_integrations",
+    parallelized=True,
+    columns=CloudIntegrationSnapshot,
+)
+def cloud_integrations(ctx: SourceContext):
+    """Persist the same provider snapshot used for account directory searches."""
+    yield ctx.cloud_snapshot().model_dump(mode="json")
+
+
+@app.resource(
+    name="cloud_integration_details",
+    parallelized=True,
+    columns=CloudIntegrationAsset,
+)
+def cloud_integration_details(ctx: SourceContext):
+    """Collect one Azure graph asset per discovered provider, including disabled ones."""
+    if not ctx.tenant_id:
+        raise ValueError(
+            "A Jamf tenant hostname is required for cloud integration identity"
+        )
+    for provider in ctx.cloud_snapshot().results:
+        if provider.provider_name != "AZURE":
+            ctx.log_unsupported_provider(provider)
+            continue
+        identity = dict(
+            summary=provider,
+            graph_id=JAMFNode.guid(provider.id, nk.CLOUD_INTEGRATION, ctx.tenant_id),
+            tenant=ctx.tenant_id,
+        )
+        try:
+            response = ctx.client.get(f"/api/v1/cloud-azure/{provider.id}")
+            response.raise_for_status()
+            details = AzureCloudConfiguration.model_validate(response.json())
+            asset = CloudIntegrationAsset(**identity, details=details)
+            if provider.enabled != details.server.enabled:
+                logger.warning(
+                    "Cloud integration %s enabled status differs between summary and details",
+                    provider.id,
+                )
+        except Exception as error:
+            logger.warning(
+                "Cloud integration detail collection failed for provider %s: %s",
+                provider.id,
+                type(error).__name__,
+            )
+            asset = CloudIntegrationAsset(
+                **identity, details_error=type(error).__name__
+            )
+        yield asset.model_dump(mode="json")
+
+
 @app.resource(name="tenant", parallelized=True, columns=Tenant)
 def tenant(host: str):
     parse_host = urlsplit(host)
@@ -287,12 +603,13 @@ def source(
     """
 
     ctx = SourceContext(
+        tenant_id=urlsplit(credentials.host).hostname,
         client=RESTClient(
             base_url=credentials.host,
             headers={"accept": "application/json"},
             auth=JamfAuth(credentials=credentials),
             paginator=SinglePagePaginator(),
-        )
+        ),
     )
 
     users_resource = users(ctx)
@@ -312,6 +629,8 @@ def source(
         sites(ctx),
         api_integrations(ctx),
         api_roles(ctx),
+        cloud_integrations(ctx),
+        cloud_integration_details(ctx),
         sso(ctx),
         tenant(credentials.host),
     )

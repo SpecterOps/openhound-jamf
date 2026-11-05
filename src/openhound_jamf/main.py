@@ -24,6 +24,7 @@ def collect(ctx: CollectContext) -> DltSource:
 
 @app.preproc(transformer=transforms)
 def preproc(ctx: PreProcContext):
+    """Return the collected resource tables required to build the Jamf lookup database."""
     resources = {
         "account_details": "account_details",
         "account_group_details": "account_group_details",
@@ -32,6 +33,8 @@ def preproc(ctx: PreProcContext):
         "script_details": "script_details",
         "api_integrations": "api_integrations",
         "api_roles": "api_roles",
+        "cloud_integrations": "cloud_integrations",
+        "cloud_integration_details": "cloud_integration_details",
         "computerextensionattributes": "computerextensionattributes",
         "sites": "sites",
         "user_details": "user_details",

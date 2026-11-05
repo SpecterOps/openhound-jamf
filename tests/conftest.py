@@ -30,11 +30,90 @@ def _page_payload(relative_path: str, page: int | None):
 
 @pytest.fixture
 def mock_jamf_api() -> Any:
+    """Provide an in-process Jamf API with configurable directory search responses.
+
+    Expose response overrides and a request log through app.state so tests can
+    exercise collection and failures without contacting a live Jamf tenant.
+    """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     app = FastAPI()
     app.state.calls = []
+    app.state.cloud_idp_pages = [
+        {
+            "totalCount": 2,
+            "results": [
+                {
+                    "id": "1001",
+                    "displayName": "Entra ID",
+                    "enabled": True,
+                    "providerName": "AZURE",
+                    "providerDescription": "Entra ID",
+                },
+                {
+                    "id": "1002",
+                    "displayName": "Test",
+                    "enabled": True,
+                    "providerName": "AZURE",
+                    "providerDescription": "Entra ID",
+                },
+            ],
+        }
+    ]
+
+    app.state.cloud_user_response = {"totalCount": 0, "results": []}
+    app.state.cloud_user_status = 200
+
+    @app.post("/api/v1/cloud-idp/{provider_id}/test-user")
+    async def cloud_user_test(provider_id: str, request: Request):
+        """Record the user search request and return the configured payload and status."""
+        from fastapi.responses import JSONResponse
+
+        payload = await request.json()
+        app.state.calls.append("cloud_user_test")
+        app.state.last_cloud_user_request = (provider_id, payload)
+        return JSONResponse(
+            app.state.cloud_user_response, status_code=app.state.cloud_user_status
+        )
+
+    app.state.group_details_override = None
+    app.state.cloud_group_response = {"totalCount": 0, "results": []}
+    app.state.cloud_group_status = 200
+
+    @app.post("/api/v1/cloud-idp/{provider_id}/test-group")
+    async def cloud_group_test(provider_id: str, request: Request):
+        """Record the group search request and return the configured payload and status."""
+        from fastapi.responses import JSONResponse
+
+        payload = await request.json()
+        app.state.calls.append("cloud_group_test")
+        app.state.last_cloud_group_request = (provider_id, payload)
+        return JSONResponse(
+            app.state.cloud_group_response, status_code=app.state.cloud_group_status
+        )
+
+    app.state.cloud_azure_overrides = {}
+    app.state.cloud_azure_status = {}
+
+    @app.get("/api/v1/cloud-azure/{provider_id}")
+    async def cloud_azure_details(provider_id: str):
+        """Return Azure configuration fixtures with provider-specific values or overrides."""
+        from fastapi.responses import JSONResponse
+
+        app.state.calls.append("cloud_azure_details")
+        payload = _load_json("v1/cloud-azure.json")
+        payload["cloudIdPCommon"]["id"] = provider_id
+        payload["server"]["id"] = provider_id
+        for page in app.state.cloud_idp_pages:
+            for provider in page["results"]:
+                if provider["id"] == provider_id:
+                    payload["cloudIdPCommon"]["displayName"] = provider["displayName"]
+                    payload["server"]["enabled"] = provider["enabled"]
+        return JSONResponse(
+            app.state.cloud_azure_overrides.get(provider_id, payload),
+            status_code=app.state.cloud_azure_status.get(provider_id, 200),
+        )
 
     @app.post("/api/v1/auth/token")
     async def auth_token():
@@ -76,7 +155,10 @@ def mock_jamf_api() -> Any:
 
     @app.get("/JSSResource/accounts/groupid/{group_id}")
     async def account_group_details(group_id: int):
+        """Return overridden group details when configured, otherwise the fixture payload."""
         app.state.calls.append("account_group_details")
+        if app.state.group_details_override is not None:
+            return app.state.group_details_override
         return _load_json("jss_resource/group-by-id.json")
 
     @app.get("/JSSResource/policies")
@@ -126,6 +208,12 @@ def mock_jamf_api() -> Any:
     async def api_integrations(page: int | None = None):
         app.state.calls.append("api_integrations")
         return _page_payload("v1/api-integrations.json", page)
+
+    @app.get("/api/v1/cloud-idp")
+    async def cloud_idp(page: int = 0):
+        """Record provider enumeration and return the configured page of cloud providers."""
+        app.state.calls.append("cloud_integrations")
+        return app.state.cloud_idp_pages[page]
 
     @app.get("/api/v1/api-roles")
     async def api_roles(page: int | None = None):

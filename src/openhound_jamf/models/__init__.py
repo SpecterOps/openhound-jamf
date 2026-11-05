@@ -1,6 +1,13 @@
 from .account import Account, BaseAccount
 from .api_integrations import ApiIntegration
 from .api_roles import ApiRole
+from .cloudintegration import (
+    AzureCloudConfiguration,
+    CloudIntegration,
+    CloudIntegrationAsset,
+    CloudIntegrationResponse,
+    CloudIntegrationSnapshot,
+)
 from .computer import Computer
 from .computerextensionatt import ComputerextensionAttribute
 from .group import BaseGroup, Group
@@ -16,6 +23,11 @@ __all__ = [
     "Account",
     "ApiRole",
     "ApiIntegration",
+    "AzureCloudConfiguration",
+    "CloudIntegration",
+    "CloudIntegrationAsset",
+    "CloudIntegrationResponse",
+    "CloudIntegrationSnapshot",
     "Computer",
     "BaseGroup",
     "Group",

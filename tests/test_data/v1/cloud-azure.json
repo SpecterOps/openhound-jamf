@@ -1,0 +1,37 @@
+{
+  "cloudIdPCommon": {
+    "id": "201",
+    "displayName": "Example Azure Provider",
+    "providerName": "AZURE"
+  },
+  "server": {
+    "id": "201",
+    "tenantId": "33333333-3333-4333-8333-333333333333",
+    "enabled": true,
+    "migrated": false,
+    "type": "PUBLIC",
+    "mappings": {
+      "userId": "id",
+      "userName": "userPrincipalName",
+      "realName": "displayName",
+      "email": "mail",
+      "department": "department",
+      "building": "",
+      "room": "",
+      "phone": "mobilePhone",
+      "position": "jobTitle",
+      "groupId": "id",
+      "groupName": "displayName"
+    },
+    "searchTimeout": 30,
+    "transitiveMembershipEnabled": true,
+    "transitiveMembershipUserField": "userPrincipalName",
+    "transitiveDirectoryMembershipEnabled": true,
+    "membershipCalculationOptimizationEnabled": true,
+    "deprecatedConsent": false,
+    "scimSupportSettings": {
+      "usernameChangeEnabled": false,
+      "groupNameChangeEnabled": false
+    }
+  }
+}

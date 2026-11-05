@@ -3,6 +3,8 @@ from functools import lru_cache
 from duckdb import DuckDBPyConnection
 from openhound.core.lookup import LookupManager
 
+from openhound_jamf.cloud_snapshot import cloud_snapshot_rows
+
 
 class JamfLookup(LookupManager):
     def __init__(self, client: DuckDBPyConnection, schema: str = "jamf"):
@@ -108,3 +110,39 @@ class JamfLookup(LookupManager):
         return self._find_single_object(
             f"SELECT configuration_type FROM {self.schema}.sso WHERE sso_enabled = true"
         )
+
+    @lru_cache
+    def cloud_integration_enabled(self) -> bool:
+        """Return the collected enabled status, or false when no snapshot exists."""
+        rows = cloud_snapshot_rows(self.client, self.schema, "cloudintegrationenabled")
+        if not rows:
+            return False
+        if len(rows) > 1:
+            raise RuntimeError(
+                "Expected one Cloud Identity Provider snapshot. "
+                "Run collection and preprocessing with cloud_integrations included."
+            )
+        enabled = rows[0][0]
+        if not isinstance(enabled, bool):
+            raise RuntimeError(
+                "Cloud Identity Provider snapshot has an invalid enabled status."
+            )
+        return enabled
+
+    @lru_cache
+    def ldap_match_user_ids(self, account_id: int) -> list[str]:
+        """Return distinct Azure object IDs matched to the given Jamf account."""
+        rows = self.client.execute(
+            f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_matches WHERE account_id = ?",
+            [account_id],
+        ).fetchall()
+        return [row[0] for row in rows]
+
+    @lru_cache
+    def ldap_match_group_ids(self, group_id: int) -> list[str]:
+        """Return distinct Azure object IDs matched to the given Jamf group."""
+        rows = self.client.execute(
+            f"SELECT DISTINCT azure_object_id FROM {self.schema}.cloud_ldap_group_matches WHERE group_id = ?",
+            [group_id],
+        ).fetchall()
+        return [row[0] for row in rows]

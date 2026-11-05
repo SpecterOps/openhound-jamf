@@ -8,12 +8,17 @@ from openhound.core.models.entries_dataclass import (
     EdgeProperties,
     PropertyMatch,
 )
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from openhound_jamf.graph import JAMFAsset, JAMFNode, JAMFNodeProperties
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
+from openhound_jamf.models.cloudldap import (
+    CloudUserTest,
+    LDAPServer,
+    normalize_ldap_servers,
+)
 from openhound_jamf.models.utils import NO_SITE_ID, normalize_site
 
 
@@ -31,7 +36,7 @@ class AccountProperties(JAMFNodeProperties):
         privilege_actions: The list of privilege actions
         privilege_settings: The list of privilege settings
         privilege_set:
-        local_account: Whether the account is local account
+        directory_user: Whether the account logs in locally or uses a directory identity provider
         collected: Indicates that the account is collected by OpenHound
     """
 
@@ -44,7 +49,7 @@ class AccountProperties(JAMFNodeProperties):
     privilege_actions: list[str]
     privilege_settings: list[str]
     privilege_set: str
-    local_account: bool
+    directory_user: bool
     collected: bool = True
 
 
@@ -71,6 +76,13 @@ class Privilege(BaseModel):
         properties=AccountProperties,
     ),
     edges=[
+        EdgeDef(
+            start="AZUser",
+            end=nk.ACCOUNT,
+            kind=ek.LDAP_MATCH,
+            description="The Azure directory identity matched this account through its configured Cloud Identity Provider.",
+            traversable=True,
+        ),
         EdgeDef(
             start=nk.TENANT,
             end=nk.ACCOUNT,
@@ -233,6 +245,17 @@ class Account(JAMFAsset):
     site: Site = Field(default_factory=lambda: Site(id=NO_SITE_ID))
     privileges: Privilege | None = None
     directory_user: bool
+    ldap_server: list[LDAPServer] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("ldap_server", "ldap_servers"),
+    )
+    cloud_idp_user_tests: list[CloudUserTest] = Field(default_factory=list)
+
+    @field_validator("ldap_server", mode="before")
+    @classmethod
+    def _normalize_ldap_servers(cls, value):
+        """Normalize missing, single, or multiple account LDAP associations for validation."""
+        return normalize_ldap_servers(value)
 
     @field_validator("site", mode="before")
     @classmethod
@@ -241,7 +264,11 @@ class Account(JAMFAsset):
 
     @property
     def as_node(self):
+        """Build the Jamf account node with its privileges and directory-user flag.
 
+        Assign Tier 0 to full-access administrators and Tier 1 to other accounts.
+        Preserve the API's directory_user value as the exported boolean property.
+        """
         tier_eval = (
             self.privilege_set == "Administrator" and self.access_level == "Full Access"
         )
@@ -261,7 +288,7 @@ class Account(JAMFAsset):
             privilege_settings=self.privileges.jss_settings if self.privileges else [],
             environmentid=self.tenant_node_id,
             privilege_set=self.privilege_set,
-            local_account=self.directory_user,
+            directory_user=self.directory_user,
         )
         return JAMFNode(kinds=[nk.ACCOUNT], properties=properties)
 
@@ -294,6 +321,28 @@ class Account(JAMFAsset):
                 kind=ek.ADMIN_TO,
                 start=EdgePath(match_by="id", value=self._node_id),
                 end=EdgePath(match_by="id", value=self.tenant_node_id),
+                properties=EdgeProperties(traversable=True),
+            )
+
+    @property
+    def _ldap_match_edges(self):
+        """Yield traversable Azure user matches for this enabled directory account.
+
+        Use preprocessed lookup evidence, matching AZUser.objectid to each Azure
+        UUID and the destination to this account's generated graph ID.
+        """
+        if not self.directory_user or self.enabled != "Enabled":
+            return
+        for azure_object_id in self._lookup.ldap_match_user_ids(self.id):
+            yield Edge(
+                kind=ek.LDAP_MATCH,
+                start=ConditionalEdgePath(
+                    kind="AZUser",
+                    property_matchers=[
+                        PropertyMatch(key="objectid", value=azure_object_id)
+                    ],
+                ),
+                end=EdgePath(match_by="id", value=self._node_id),
                 properties=EdgeProperties(traversable=True),
             )
 
@@ -600,6 +649,7 @@ class Account(JAMFAsset):
 
     @property
     def edges(self):
+        """Yield the account containment, privilege, SSO, and identity-matching edges."""
         yield from self._admin_to_edge
         yield from self._admin_to_site_edges
         yield from self._contains_edge
@@ -621,3 +671,4 @@ class Account(JAMFAsset):
         yield from self._update_api_client_and_assign_role_edge
         yield from self._update_sso_settings_edges
         yield from self._az_matched_email_edges
+        yield from self._ldap_match_edges
