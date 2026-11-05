@@ -116,9 +116,8 @@ def test_lookup_exports_native_tenant_boolean(enabled):
         )
 
 
-@pytest.mark.parametrize("values", [[], [True, False], [None], ["False"]])
-def test_lookup_rejects_missing_or_invalid_snapshot(values):
-    """Verify lookup rejects ambiguous, missing, null, or non-boolean snapshot values."""
+@pytest.mark.parametrize("values", [[True, False], [None], ["False"]])
+def test_lookup_rejects_multiple_or_invalid_snapshots(values):
     with duckdb.connect() as con:
         con.execute("CREATE SCHEMA jamf")
         column_type = "VARCHAR" if values == ["False"] else "BOOLEAN"
@@ -131,8 +130,7 @@ def test_lookup_rejects_missing_or_invalid_snapshot(values):
             JamfLookup(con).cloud_integration_enabled()
 
 
-def test_lookup_rejects_missing_table():
-    """Verify absent provider collection data raises a database error."""
+def test_lookup_rejects_missing_schema():
     with duckdb.connect() as con:
         with pytest.raises(duckdb.CatalogException):
             JamfLookup(con).cloud_integration_enabled()

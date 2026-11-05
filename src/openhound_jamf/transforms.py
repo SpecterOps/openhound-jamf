@@ -4,6 +4,8 @@ import logging
 import duckdb
 from pydantic import ValidationError
 
+from openhound_jamf.cloud_snapshot import cloud_snapshot_rows
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,18 +40,15 @@ def cloud_ldap_matches(con, schema: str = "jamf") -> None:
         """Decode a stored JSON string, leaving already-decoded database values unchanged."""
         return json.loads(value) if isinstance(value, str) else value
 
-    try:
-        snapshots = con.execute(
-            f"SELECT total_count, results, cloudintegrationenabled FROM {schema}.cloud_integrations"
-        ).fetchall()
-    except duckdb.CatalogException:
-        snapshots = []
+    snapshots = cloud_snapshot_rows(
+        con, schema, "total_count, results, cloudintegrationenabled"
+    )
     if not snapshots:
         logger.warning(
             "Cloud Identity Provider snapshot unavailable; skipping jamf_LDAPMatch generation"
         )
         return
-    if len(snapshots) != 1:
+    if len(snapshots) > 1:
         raise ValueError(
             "Expected one Cloud Identity Provider snapshot for LDAP matching"
         )
@@ -144,10 +143,12 @@ def cloud_ldap_group_matches(con, schema: str = "jamf") -> None:
         """Decode a stored JSON string, leaving already-decoded database values unchanged."""
         return json.loads(value) if isinstance(value, str) else value
 
-    snapshots = con.execute(
-        f"SELECT total_count, results, cloudintegrationenabled FROM {schema}.cloud_integrations"
-    ).fetchall()
-    if len(snapshots) != 1:
+    snapshots = cloud_snapshot_rows(
+        con, schema, "total_count, results, cloudintegrationenabled"
+    )
+    if not snapshots:
+        return
+    if len(snapshots) > 1:
         raise ValueError(
             "Expected one Cloud Identity Provider snapshot for group LDAP matching"
         )
