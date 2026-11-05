@@ -48,7 +48,9 @@ def create_snapshot_table(con):
 
 
 @pytest.mark.parametrize("snapshot", ["missing", "empty_table", "empty_results"])
-def test_no_snapshot_produces_empty_matches_and_disabled_tenant(database, snapshot):
+def test_no_snapshot_produces_empty_matches_and_disabled_tenant(
+    database, snapshot, caplog
+):
     if snapshot != "missing":
         create_snapshot_table(database)
     if snapshot == "empty_results":
@@ -63,6 +65,10 @@ def test_no_snapshot_produces_empty_matches_and_disabled_tenant(database, snapsh
 
     cloud_ldap_matches(database, "custom")
     cloud_ldap_group_matches(database, "custom")
+    assert (
+        "Cloud Identity Provider snapshot unavailable; skipping jamf_LDAPMatch generation"
+        in caplog.text
+    ) == (snapshot != "empty_results")
     lookup = JamfLookup(database, "custom")
     assert lookup.ldap_match_user_ids(1) == []
     assert lookup.ldap_match_group_ids(1) == []

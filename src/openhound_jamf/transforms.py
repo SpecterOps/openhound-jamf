@@ -43,6 +43,9 @@ def cloud_ldap_matches(con, schema: str = "jamf") -> None:
         con, schema, "total_count, results, cloudintegrationenabled"
     )
     if not snapshots:
+        logger.warning(
+            "Cloud Identity Provider snapshot unavailable; skipping jamf_LDAPMatch generation"
+        )
         return
     if len(snapshots) > 1:
         raise ValueError(
