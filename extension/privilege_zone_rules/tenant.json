@@ -1,4 +1,5 @@
 {
+  "key": "jamf_tenant",
   "name": "Jamf: Tenant",
   "zone": "Tier Zero",
   "description": "Tenant nodes in Jamf Pro.",

@@ -1,5 +1,7 @@
 {
+  "query_key": "Jamf_Matched_Email_Edges",
   "name": "Jamf: Matched Email Edges",
   "description": "Show nodes with the edge jamf_MatchedEmail",
-  "query": "MATCH p=(s)-[:jamf_MatchedEmail]->(t)\nRETURN p\nLIMIT 1000"
+  "query": "MATCH p=(s)-[:jamf_MatchedEmail]->(t)\nRETURN p\nLIMIT 1000",
+  "category": "Investigations"
 }

@@ -1,4 +1,5 @@
 {
+  "key": "jamf_tier0_assigned_computers",
   "name": "Jamf: Tier Zero Assigned Computers",
   "zone": "Tier Zero",
   "description": "Adds Jamf computers to Tier Zero that have assigned users matching Tier Zero principal attributes.",

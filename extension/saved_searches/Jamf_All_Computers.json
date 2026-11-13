@@ -1,5 +1,7 @@
 {
+  "query_key": "Jamf_All_Computers",
   "name": "Jamf: All Computers",
   "description": "Get all Computers",
-  "query": "MATCH p=(s:jamf_Computer)\nRETURN p"
+  "query": "MATCH p=(s:jamf_Computer)\nRETURN p",
+  "category": "Investigations"
 }

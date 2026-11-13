@@ -1,5 +1,7 @@
 {
+  "query_key": "Jamf_API_Client_Immediate_Edges",
   "name": "Jamf: API Client Immediate Edges",
   "description": "View immediate edges and impacted principals for Jamf API Clients",
-  "query": "MATCH p=(s:jamf_ApiClient)- [] ->(t)\nRETURN p\nLIMIT 1000"
+  "query": "MATCH p=(s:jamf_ApiClient)- [] ->(t)\nRETURN p\nLIMIT 1000",
+  "category": "Investigations"
 }
