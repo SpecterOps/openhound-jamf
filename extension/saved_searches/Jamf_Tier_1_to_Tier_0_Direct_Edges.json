@@ -1,5 +1,7 @@
 {
+  "query_key": "jamf_Tier_1_to_Tier_0_Direct_Edges",
   "name": "Jamf: Tier 1 to Tier 0 Direct Edges",
   "description": "Retrieve direct edges between Tier 1 nodes and Tier 0 nodes",
-  "query": "MATCH p=(s)-[]->(t)\nWHERE s.tier = 1 AND t.tier = 0\nRETURN p\nLIMIT 1000"
+  "query": "MATCH p=(s)-[]->(t)\nWHERE s.tier = 1 AND t.tier = 0\nRETURN p\nLIMIT 1000",
+  "category": "Investigations"
 }

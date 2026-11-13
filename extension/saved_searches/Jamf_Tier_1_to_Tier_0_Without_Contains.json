@@ -1,5 +1,7 @@
 {
+  "query_key": "jamf_Tier_1_to_Tier_0_Without_Contains",
   "name": "Jamf: Tier 1 to Tier 0 Without Contains",
   "description": "Filter out jamf_Contains edges from Tiered node query",
-  "query": "MATCH p=(s)-[r]->(t)\nWHERE s.tier = 1 AND t.tier = 0\nAND type(r) <> 'jamf_Contains'\nRETURN p\nLIMIT 1000"
+  "query": "MATCH p=(s)-[r]->(t)\nWHERE s.tier = 1 AND t.tier = 0\nAND type(r) <> 'jamf_Contains'\nRETURN p\nLIMIT 1000",
+  "category": "Investigations"
 }

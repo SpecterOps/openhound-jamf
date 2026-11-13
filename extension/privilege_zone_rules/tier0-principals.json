@@ -1,4 +1,5 @@
 {
+  "key": "jamf_tier0_principals",
   "name": "Jamf: Tier Zero Principals",
   "zone": "Tier Zero",
   "description": "Accounts and group principals with 'Full Access' administrator privileges in the tenant, the 'jamf_Tenant' root node, and 'SSO' configuration if enabled.",
