@@ -56,8 +56,11 @@ saml_metadata_allowed_origins = "https://example.okta.com,https://login.example.
 
 The environment variable form is
 `SOURCES__JAMF__SAML_METADATA_ALLOWED_ORIGINS`. If you do not set it, the collector
-does not fetch IdP metadata from another origin. Then it writes no SAML facts for
-that IdP, and the log names this setting.
+does not fetch IdP metadata from another origin. Then the issuer is unknown. The
+collector still writes the Jamf SAML service provider, its assertion consumer
+services, its account resolution rule, and its account edges. It writes no issuer
+node and no `SAML_TrustsIssuer` edge, so the correlator cannot pair this service
+provider with an IdP. The log names this setting.
 
 ## Containers
 

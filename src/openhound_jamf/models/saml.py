@@ -76,7 +76,7 @@ class SAMLFacts:
 
     sp_entity_id: str
     provider: ServiceProviderFact
-    issuer: IssuerFact
+    issuer: IssuerFact | None
     routes: list[RouteFact]
     accounts: list[AccountFact]
     native: EdgePath
@@ -215,12 +215,11 @@ class SAMLSSOBase(JAMFAsset):
     def facts(self) -> SAMLFacts | None:
         """Return the SAML facts, or None when the record has no usable SAML trust.
 
-        The library builds the SP edges only for a trusted issuer, so a record
-        whose IdP metadata was not observed has no facts (library gap:
-        SpecterOps/saml-og-research#95).
+        When the IdP metadata was not observed, the issuer is None. The SP facts
+        are still written, with no `SAML_TrustsIssuer` edge.
         """
         sp_entity_id, issuer_entity_id = self._sp_entity_id, self._issuer_entity_id
-        if not self.is_saml or not sp_entity_id or not issuer_entity_id:
+        if not self.is_saml or not sp_entity_id:
             return None
         attribute = self._mapping_attribute
         accounts = self._accounts(attribute) if attribute else []
@@ -246,7 +245,7 @@ class SAMLSSOBase(JAMFAsset):
         return SAMLFacts(
             sp_entity_id=sp_entity_id,
             provider=provider,
-            issuer=IssuerFact(entity_id=issuer_entity_id),
+            issuer=IssuerFact(entity_id=issuer_entity_id) if issuer_entity_id else None,
             routes=self._routes(sp_entity_id),
             accounts=accounts,
             native=EdgePath(
@@ -284,14 +283,18 @@ class SAMLServiceProvider(SAMLSSOBase):
         if facts is None:
             if self.is_saml:
                 logger.warning(
-                    "Jamf SAML facts skipped: the SP entity ID or the IdP issuer "
-                    "was not observed (%s). An IdP on another origin is fetched only "
-                    "when %s permits its HTTPS origin; the library cannot yet write "
-                    "SP facts without an issuer (saml-og-research#95).",
+                    "Jamf SAML facts skipped: the SP entity ID was not observed (%s).",
                     "; ".join(self._metadata_errors) or "no metadata error",
-                    ALLOWLIST_SETTING,
                 )
             return None
+        if facts.issuer is None:
+            logger.warning(
+                "Jamf SAML SP written without a trusted issuer: the IdP issuer was "
+                "not observed (%s). An IdP on another origin is fetched only when %s "
+                "permits its HTTPS origin.",
+                "; ".join(self._metadata_errors) or "no metadata error",
+                ALLOWLIST_SETTING,
+            )
         return sp.service_provider_node(SAML, facts.provider)
 
     @property
@@ -349,7 +352,7 @@ class SAMLIssuer(SAMLSSOBase):
     @property
     def as_node(self) -> SamlNode | None:
         facts = self.facts
-        if facts is None:
+        if facts is None or facts.issuer is None:
             return None
         return shared.issuer_node(SAML, self.tenant_node_id, facts.issuer)
 
