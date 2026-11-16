@@ -1,7 +1,8 @@
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Union
+from typing import Any, Union
 from urllib.parse import urlsplit
 
 import dlt
@@ -15,6 +16,7 @@ from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
 from .graph import JAMFNode
 from .kinds import nodes as nk
+from .saml_metadata import MetadataOrigin, enrich_sso_metadata, parse_allowed_origins
 from .models.cloudldap import (
     CloudGroupResponse,
     CloudGroupTest,
@@ -25,6 +27,11 @@ from .models.cloudldap import (
 )
 from .models import (
     SSO,
+    SAMLAccountResolutionField,
+    SAMLAccountResolutionRule,
+    SAMLAssertionConsumerService,
+    SAMLIssuer,
+    SAMLServiceProvider,
     Account,
     ApiIntegration,
     ApiRole,
@@ -56,6 +63,8 @@ logger = logging.getLogger(__name__)
 class SourceContext:
     client: RESTClient
     tenant_id: str | None = None
+    base_url: str = ""
+    allowed_idp_origins: frozenset[MetadataOrigin] = frozenset()
     _cloud_snapshot: CloudIntegrationSnapshot | None = field(default=None, init=False)
     _cloud_error: Exception | None = field(default=None, init=False)
     _cloud_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -440,7 +449,67 @@ def sso(ctx: SourceContext):
         dict: The JAMF SSO settings.
     """
     response = ctx.client.get("/api/v3/sso").json()
-    yield response
+    yield enrich_sso_metadata(response, ctx.base_url, ctx.allowed_idp_origins)
+
+
+@app.transformer(
+    name="saml_service_provider",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLServiceProvider,
+)
+def saml_service_provider(sso_config: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """DLT transformer, forwards the SSO record to the SAML service provider asset."""
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_account_resolution_rule",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAccountResolutionRule,
+)
+def saml_account_resolution_rule(
+    sso_config: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """DLT transformer, forwards the SSO record to the account resolution rule asset."""
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_account_resolution_field",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAccountResolutionField,
+)
+def saml_account_resolution_field(
+    sso_config: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """DLT transformer, forwards the SSO record to the account resolution field asset."""
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_issuer", data_from=sso, parallelized=True, columns=SAMLIssuer
+)
+def saml_issuer(sso_config: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """DLT transformer, forwards the SSO record to the SAML issuer asset."""
+    yield sso_config
+
+
+@app.transformer(
+    name="saml_assertion_consumer_service",
+    data_from=sso,
+    parallelized=True,
+    columns=SAMLAssertionConsumerService,
+)
+def saml_assertion_consumer_service(
+    sso_config: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """DLT transformer, forwards the SSO record once for each ACS endpoint in the SP metadata."""
+    sp_metadata = (sso_config.get("samlMetadata") or {}).get("sp") or {}
+    for endpoint in sp_metadata.get("assertionConsumerServices", []):
+        yield {**sso_config, "samlAcs": endpoint}
 
 
 @app.resource(name="computers", parallelized=True, columns=Computer)
@@ -591,11 +660,15 @@ def source(
     credentials: Union[
         JamfPasswordCredentials, JamfClientCredentials
     ] = dlt.secrets.value,
+    saml_metadata_allowed_origins: str | None = dlt.config.value,
 ):
     """DLT source, defines JAMF collection resources and transformers.
 
     Args:
         credentials (JamfPasswordCredentials | JamfClientCredentials): The JAMF credentials configuration
+        saml_metadata_allowed_origins (str | None): Comma-separated HTTPS origins that may
+            serve the IdP metadata, set with SOURCES__JAMF__SAML_METADATA_ALLOWED_ORIGINS.
+            Without it, only the Jamf origin may serve metadata.
 
     Returns:
         (tuple[users, user_details, sites, scripts, script_details, policy_details, policies, computers, computerextensionattributes, api_roles, api_integrations, accounts, account_details, account_groups, account_group_details]): A tuple of DLT resources/transformers registered for the JAMF source.
@@ -610,6 +683,8 @@ def source(
             auth=JamfAuth(credentials=credentials),
             paginator=SinglePagePaginator(),
         ),
+        base_url=credentials.host,
+        allowed_idp_origins=parse_allowed_origins(saml_metadata_allowed_origins),
     )
 
     users_resource = users(ctx)
@@ -617,6 +692,7 @@ def source(
     scripts_resource = scripts(ctx)
     accounts_resource = accounts(ctx)
     groups_resource = account_groups(ctx)
+    sso_resource = sso(ctx)
 
     return (
         users_resource | user_details(ctx),
@@ -631,6 +707,11 @@ def source(
         api_roles(ctx),
         cloud_integrations(ctx),
         cloud_integration_details(ctx),
-        sso(ctx),
+        sso_resource,
+        sso_resource | saml_service_provider(),
+        sso_resource | saml_account_resolution_rule(),
+        sso_resource | saml_account_resolution_field(),
+        sso_resource | saml_issuer(),
+        sso_resource | saml_assertion_consumer_service(),
         tenant(credentials.host),
     )

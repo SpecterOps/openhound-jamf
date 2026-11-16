@@ -1,9 +1,19 @@
 from functools import lru_cache
+from typing import TypedDict
 
 from duckdb import DuckDBPyConnection
 from openhound.core.lookup import LookupManager
 
 from openhound_jamf.cloud_snapshot import cloud_snapshot_rows
+
+
+class JamfAccountSAMLBinding(TypedDict):
+    """Native Jamf account values that a SAML user mapping can match."""
+
+    id: int
+    name: str | None
+    email: str | None
+    enabled: str | None
 
 
 class JamfLookup(LookupManager):
@@ -54,6 +64,17 @@ class JamfLookup(LookupManager):
     @lru_cache
     def all_accounts(self):
         return self._find_all_objects(f"SELECT id FROM {self.schema}.account_details")
+
+    @lru_cache
+    def all_account_saml_bindings(self) -> list[JamfAccountSAMLBinding]:
+        """Return the native values of every account, for SAML account matching."""
+        rows = self._find_all_objects(
+            f"SELECT id, name, email, enabled FROM {self.schema}.account_details"
+        )
+        return [
+            JamfAccountSAMLBinding(id=id_, name=name, email=email, enabled=enabled)
+            for id_, name, email, enabled in rows
+        ]
 
     @lru_cache
     def all_groups(self):

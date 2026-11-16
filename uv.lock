@@ -869,6 +869,9 @@ wheels = [
 [[package]]
 name = "openhound-jamf"
 source = { editable = "." }
+dependencies = [
+    { name = "openhound-saml-producer" },
+]
 
 [package.dev-dependencies]
 container = [
@@ -886,6 +889,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "openhound-saml-producer", specifier = "==0.4.6rc3" }]
 
 [package.metadata.requires-dev]
 container = [{ name = "openhound", specifier = ">=0.4.2,<0.5" }]
@@ -898,6 +902,18 @@ dev = [
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "ruff", specifier = ">=0.15.5" },
     { name = "zensical", specifier = ">=0.0.27" },
+]
+
+[[package]]
+name = "openhound-saml-producer"
+version = "0.4.6rc3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openhound" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/13/97/16540ac62ad08346d6115f322ca03a821ffbd9e7ed6f06d975358cae36a0/openhound_saml_producer-0.4.6rc3.tar.gz", hash = "sha256:28197db8411b4a70e8de81f5b509eb4eece5a06992e5a76083e83fee859e9e03", size = 75406, upload-time = "2026-11-15T23:49:08.621Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/4c/f06f3e7a4b72277e0a92e17147894907e5970f9f34182780520be37b84d7/openhound_saml_producer-0.4.6rc3-py3-none-any.whl", hash = "sha256:e0e6e72750e3b37456b76a4cba230051c448cb4a8dc43587add60ff08041e445", size = 68510, upload-time = "2026-11-15T23:49:07.374Z" },
 ]
 
 [[package]]

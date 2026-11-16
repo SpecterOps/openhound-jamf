@@ -10,6 +10,11 @@ from openhound.core.models.entries_dataclass import (
 
 from openhound_jamf.kinds.nodes import TENANT
 
+# Kind that every native Jamf node carries. The app does not set `source_kind`,
+# because OpenHound would also add it to the SAML nodes, which carry only the
+# kinds of the producer library.
+JAMF_SOURCE_KIND = "jamf"
+
 
 @dataclass
 class JAMFNodeProperties(BaseProperties):
@@ -39,6 +44,8 @@ class JAMFNode(BaseNode):
         self.id = self.guid(
             str(self.properties.id), self.kinds[0], self.properties.tenant
         )
+        if JAMF_SOURCE_KIND not in self.kinds:
+            self.kinds.append(JAMF_SOURCE_KIND)
 
 
 class JAMFAsset(BaseAsset):

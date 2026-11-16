@@ -44,7 +44,7 @@ def test_directory_group_export(extra, expected):
     restored._lookup = group._lookup
     node = asdict(restored.as_node)
     assert node["properties"]["directory_group"] is expected
-    assert node["kinds"] == ["jamf_Group"]
+    assert node["kinds"] == ["jamf_Group", "jamf"]
     assert "ldap_server" not in node["properties"]
 
 

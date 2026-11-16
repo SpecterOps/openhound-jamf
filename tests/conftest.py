@@ -10,8 +10,25 @@ from fastapi import Request
 from requests import PreparedRequest, Response
 from requests.hooks import dispatch_hook
 from requests.structures import CaseInsensitiveDict
+from starlette.responses import Response as StarletteResponse
 
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
+
+JAMF_SP_METADATA = """<?xml version="1.0" encoding="UTF-8"?>
+<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="https://jamf.test/saml/metadata">
+  <md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://jamf.test/saml/SSO" index="0" isDefault="true"/>
+  </md:SPSSODescriptor>
+</md:EntityDescriptor>
+"""
+
+OKTA_IDP_METADATA = """<?xml version="1.0" encoding="UTF-8"?>
+<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="http://www.okta.com/example-jamf-app">
+  <md:IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://example.idp.com/app/id/sso/saml"/>
+  </md:IDPSSODescriptor>
+</md:EntityDescriptor>
+"""
 
 
 def _load_json(relative_path: str):
@@ -191,10 +208,25 @@ def mock_jamf_api() -> Any:
         app.state.calls.append("sites")
         return _load_json("jss_resource/sites.json")
 
+    app.state.sso_user_mapping = None
+
     @app.get("/api/v3/sso")
     async def sso():
         app.state.calls.append("sso")
-        return _load_json("v3/sso.json")
+        payload = _load_json("v3/sso.json")
+        if app.state.sso_user_mapping:
+            payload["samlSettings"]["userMapping"] = app.state.sso_user_mapping
+        return payload
+
+    @app.get("/saml/metadata")
+    async def jamf_sp_metadata():
+        app.state.calls.append("jamf_sp_metadata")
+        return StarletteResponse(JAMF_SP_METADATA, media_type="application/xml")
+
+    @app.get("/app/id/sso/saml/metadata")
+    async def okta_idp_metadata():
+        app.state.calls.append("okta_idp_metadata")
+        return StarletteResponse(OKTA_IDP_METADATA, media_type="application/xml")
 
     @app.get("/api/v1/computers-inventory")
     async def computers_inventory(
@@ -243,6 +275,7 @@ def mock_dlt_requests(monkeypatch, mock_jamf_api):
         requests_response = Response()
         requests_response.status_code = response.status_code
         requests_response._content = response.content
+        requests_response._content_consumed = True
         requests_response.headers = CaseInsensitiveDict(response.headers)
         requests_response.encoding = response.encoding or "utf-8"
         requests_response.reason = response.reason_phrase

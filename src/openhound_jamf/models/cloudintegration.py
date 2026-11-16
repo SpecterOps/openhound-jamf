@@ -25,7 +25,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhound_jamf.graph import JAMFAsset, JAMFNode
+from openhound_jamf.graph import JAMF_SOURCE_KIND, JAMFAsset, JAMFNode
 from openhound_jamf.kinds import edges as ek
 from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.main import app
@@ -323,7 +323,7 @@ class CloudIntegrationAsset(JAMFAsset):
             properties.update(detailed)
         return CloudIntegrationNode(
             graph_id=self.graph_id,
-            kinds=[nk.CLOUD_INTEGRATION],
+            kinds=[nk.CLOUD_INTEGRATION, JAMF_SOURCE_KIND],
             properties=CloudIntegrationProperties(
                 **properties,
                 name=self.summary.display_name.upper(),
