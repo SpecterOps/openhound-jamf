@@ -3,7 +3,8 @@ name = "openhound-jamf"
 dynamic = ["version"]
 description = "OpenGraph collector for Jamf using OpenHound"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
+dependencies = ["openhound-saml-producer==0.4.6rc3"]
 authors = [
     { name = "Lance Cain", email = "lcain@specterops.io" },
     { name = "jdreijer@specterops.io", email = "jdreijer@specterops.io" }

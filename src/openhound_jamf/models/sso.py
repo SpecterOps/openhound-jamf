@@ -23,6 +23,8 @@ class SSOProperties(JAMFNodeProperties):
 class SAMLSettings(BaseModel):
     group_attribute_name: str = Field(alias="groupAttributeName")
     group_rdn_key: str = Field(alias="groupRdnKey")
+    user_mapping: str | None = Field(alias="userMapping", default=None)
+    entity_id: str | None = Field(alias="entityId", default=None)
 
 
 @app.asset(

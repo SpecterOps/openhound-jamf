@@ -27,5 +27,11 @@ parameters:
     description: The amount of assets to generate
     required: false
     default: 10000
+  - name: saml_metadata_allowed_origins
+    description: >-
+      Comma-separated HTTPS origins that may serve the SAML identity provider
+      metadata, for example https://example.okta.com. Without it, only the Jamf
+      origin is fetched, and an identity provider on another origin gets no SAML facts.
+    required: false
 
 tags: [ "jamf", "source", "opengraph" ]

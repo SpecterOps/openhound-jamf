@@ -92,7 +92,7 @@ def test_every_sample_property_is_preserved_and_flattened():
     }
     assert expected.items() <= node["properties"].items()
     assert node["id"] == JAMFNode.guid("201", nk.CLOUD_INTEGRATION, TENANT)
-    assert node["kinds"] == ["jamf_CloudIntegration"]
+    assert node["kinds"] == ["jamf_CloudIntegration", "jamf"]
     properties = node["properties"]
     assert properties["name"] == "EXAMPLE AZURE PROVIDER"
     assert properties["displayname"] == "Example Azure Provider"

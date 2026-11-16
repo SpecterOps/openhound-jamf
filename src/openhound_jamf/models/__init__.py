@@ -13,6 +13,13 @@ from .computerextensionatt import ComputerextensionAttribute
 from .group import BaseGroup, Group
 from .policy import BasePolicy, Policy
 from .script import BaseScript, Script
+from .saml import (
+    SAMLAccountResolutionField,
+    SAMLAccountResolutionRule,
+    SAMLAssertionConsumerService,
+    SAMLIssuer,
+    SAMLServiceProvider,
+)
 from .site import Site
 from .sso import SSO
 from .tenant import Tenant
@@ -41,4 +48,9 @@ __all__ = [
     "User",
     "Site",
     "SSO",
+    "SAMLAccountResolutionField",
+    "SAMLAccountResolutionRule",
+    "SAMLAssertionConsumerService",
+    "SAMLIssuer",
+    "SAMLServiceProvider",
 ]

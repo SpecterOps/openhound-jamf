@@ -48,6 +48,7 @@ Replace all placeholders in `.dlt/secrets.toml`:
 | BHE `token_id`, `token_key` | This deployment's Jamf OpenHound collector client credentials |
 | Jamf `host` | HTTPS Jamf Pro origin, e.g. `https://example.jamfcloud.com`, without an API path |
 | Jamf `client_id`, `client_secret` | Jamf API client credentials |
+| Jamf `saml_metadata_allowed_origins` (optional, in `.dlt/config.toml` under `[sources.jamf]`) | Comma-separated HTTPS origins that may serve the SAML identity provider metadata, e.g. `https://example.okta.com`. See the [SAML section](../README.md#saml-metadata-origins) of the main README. |
 
 For account authentication, remove both `client_id` and `client_secret`, then
 set `username` and `password` as shown in the example. Configure exactly one
