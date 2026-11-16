@@ -41,6 +41,24 @@ Follow the OpenHound docs to get started:
 
 - [OpenHound Documentation](https://bloodhound.specterops.io/openhound/overview)
 
+## SAML metadata origins
+
+The collector writes SAML nodes and edges for the Jamf SSO setup. To do this, it
+reads the SAML metadata of Jamf and of the identity provider (IdP) from the URLs
+in the Jamf SSO settings. The Jamf origin is always allowed. For an IdP on another
+origin, you must allow that origin yourself. Set `saml_metadata_allowed_origins` to
+a comma-separated list of HTTPS origins, with no path:
+
+```toml
+[sources.jamf]
+saml_metadata_allowed_origins = "https://example.okta.com,https://login.example.com"
+```
+
+The environment variable form is
+`SOURCES__JAMF__SAML_METADATA_ALLOWED_ORIGINS`. If you do not set it, the collector
+does not fetch IdP metadata from another origin. Then it writes no SAML facts for
+that IdP, and the log names this setting.
+
 ## Containers
 
 Each new release publishes multi-architecture images to GHCR with versions

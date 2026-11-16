@@ -13,6 +13,11 @@ SP_XML = b"""<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata
 <md:SPSSODescriptor><md:AssertionConsumerService Location="https://jamf.test/acs" Binding="b" index="1" isDefault="true"/>
 </md:SPSSODescriptor></md:EntityDescriptor>"""
 IDP_XML = b'<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="idp"/>'
+# A byte search for "<!DOCTYPE" misses this body, but a parser expands the entity.
+UTF16_ENTITY_XML = (
+    '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE a [<!ENTITY x "idp">]>'
+    '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="&x;"/>'
+)
 RECORD = {
     "configurationType": "SAML",
     "samlSettings": {
@@ -83,7 +88,11 @@ def test_metadata_gives_entity_ids_and_every_acs_endpoint(monkeypatch):
 @pytest.mark.parametrize(
     ("allowed", "routes", "error"),
     [
-        (frozenset(), {}, "idp: metadata URL is not allowed"),
+        (
+            frozenset(),
+            {},
+            "idp: metadata URL is not allowed; permit its HTTPS origin with saml_metadata_allowed_origins",
+        ),
         (
             frozenset({IDP_ORIGIN}),
             {
@@ -98,6 +107,15 @@ def test_metadata_gives_entity_ids_and_every_acs_endpoint(monkeypatch):
             {
                 "https://idp.example/metadata": FakeResponse(
                     body=b"<!DOCTYPE x>" + IDP_XML
+                )
+            },
+            "idp: invalid metadata XML",
+        ),
+        (
+            frozenset({IDP_ORIGIN}),
+            {
+                "https://idp.example/metadata": FakeResponse(
+                    body=UTF16_ENTITY_XML.encode("utf-16")
                 )
             },
             "idp: invalid metadata XML",

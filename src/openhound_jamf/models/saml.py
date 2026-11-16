@@ -31,7 +31,6 @@ from openhound_saml_producer.contract import (
     ConditionTemplate,
     NodeKind,
 )
-from openhound_saml_producer.account_resolution import render_rule
 from openhound_saml_producer.facts import (
     AccountFieldFact,
     AccountResolutionCondition,
@@ -44,7 +43,12 @@ from openhound_jamf.kinds import nodes as nk
 from openhound_jamf.lookup import JamfAccountSAMLBinding
 from openhound_jamf.main import app
 from openhound_jamf.models.sso import SAMLSettings
-from openhound_jamf.saml_metadata import AssertionConsumerService, SAMLMetadata
+from openhound_jamf.saml_metadata import (
+    ALLOWLIST_SETTING,
+    AssertionConsumerService,
+    SAMLMetadata,
+    is_absolute_uri,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +134,15 @@ class SAMLSSOBase(JAMFAsset):
 
     @property
     def _sp_entity_id(self) -> str | None:
-        """Return the SP entity ID from metadata, else from the SSO settings."""
+        """Return the SP entity ID from metadata, else an absolute one from the settings.
+
+        Jamf may store a relative path in `entityId`. A path is not an entity ID.
+        """
         if self.saml_metadata and self.saml_metadata.sp:
             if self.saml_metadata.sp.entity_id:
                 return self.saml_metadata.sp.entity_id
-        return self.saml_settings.entity_id if self.saml_settings else None
+        configured = self.saml_settings.entity_id if self.saml_settings else None
+        return configured if configured and is_absolute_uri(configured) else None
 
     @property
     def _issuer_entity_id(self) -> str | None:
@@ -208,7 +216,8 @@ class SAMLSSOBase(JAMFAsset):
         """Return the SAML facts, or None when the record has no usable SAML trust.
 
         The library builds the SP edges only for a trusted issuer, so a record
-        whose IdP metadata was not observed has no facts.
+        whose IdP metadata was not observed has no facts (library gap:
+        SpecterOps/saml-og-research#95).
         """
         sp_entity_id, issuer_entity_id = self._sp_entity_id, self._issuer_entity_id
         if not self.is_saml or not sp_entity_id or not issuer_entity_id:
@@ -276,8 +285,11 @@ class SAMLServiceProvider(SAMLSSOBase):
             if self.is_saml:
                 logger.warning(
                     "Jamf SAML facts skipped: the SP entity ID or the IdP issuer "
-                    "was not observed (%s)",
+                    "was not observed (%s). An IdP on another origin is fetched only "
+                    "when %s permits its HTTPS origin; the library cannot yet write "
+                    "SP facts without an issuer (saml-og-research#95).",
                     "; ".join(self._metadata_errors) or "no metadata error",
+                    ALLOWLIST_SETTING,
                 )
             return None
         return sp.service_provider_node(SAML, facts.provider)
@@ -325,10 +337,9 @@ class SAMLAccountResolutionField(SAMLSSOBase):
         facts = self.facts
         if facts is None or not facts.provider.rules:
             return None
-        names = render_rule(facts.provider.rules[0].conditions).account_field_names
-        if not names:
+        if self._mapping_attribute != "name":
             return None
-        return sp.account_resolution_field_node(SAML, facts.provider, names[0])
+        return sp.account_resolution_field_node(SAML, facts.provider, USERNAME_FIELD)
 
 
 @app.asset(node=NODE_DEFS[NodeKind.ISSUER])

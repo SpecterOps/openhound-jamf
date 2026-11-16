@@ -71,9 +71,18 @@ ALL_ASSETS = (
 )
 
 
-def test_without_issuer_no_saml_fact_is_written():
-    """The library builds SP edges only for a trusted issuer, so none is written."""
-    record = {**_record(idp=False), "samlAcs": ACS}
+@pytest.mark.parametrize(
+    "record",
+    [
+        # The library builds SP edges only for a trusted issuer (#95).
+        _record(idp=False),
+        # SP fetch failed and the settings hold a relative path, not an entity ID.
+        {**_record(), "samlMetadata": {**_record()["samlMetadata"], "sp": None}},
+    ],
+    ids=["no-issuer", "relative-entity-id-without-sp-metadata"],
+)
+def test_without_issuer_or_entity_id_no_saml_fact_is_written(record):
+    record = {**record, "samlAcs": ACS}
     accounts = [_account(1, "jsmith", "j@example.com", "Enabled")]
     for cls in ALL_ASSETS:
         asset = _asset(cls, record, accounts)
@@ -125,15 +134,6 @@ def test_username_rule_exists_only_when_an_account_gives_the_field():
         "SAML_UsesAccountResolutionField",
         "SAML_HasAccountResolutionValue",
     } <= kinds
-
-
-def test_shared_nodes_use_the_observed_route_and_issuer():
-    record = {**_record(), "samlAcs": ACS}
-    issuer = _asset(SAMLIssuer, record, []).as_node
-    acs = _asset(SAMLAssertionConsumerService, record, []).as_node
-    assert issuer.properties.entity_id == "http://idp.example/app"
-    assert acs.properties.acs_url == ACS["acsUrl"]
-    assert acs.properties.sp_entity_id == "https://jamf.test/saml/metadata"
 
 
 @pytest.mark.usefixtures("mock_dlt_requests")

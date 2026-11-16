@@ -20,6 +20,8 @@ MAX_REDIRECTS = 3
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 METADATA_NS = {"md": "urn:oasis:names:tc:SAML:2.0:metadata"}
 
+ALLOWLIST_SETTING = "saml_metadata_allowed_origins"
+
 # (scheme, host, port)
 MetadataOrigin = tuple[str, str, int]
 
@@ -120,9 +122,30 @@ def _index(value: str | None) -> int | None:
     return int(value) if value and value.isdecimal() else None
 
 
+class _NoDoctypeBuilder(ElementTree.TreeBuilder):
+    """Tree builder that rejects a DOCTYPE, so no entity can be declared or expanded."""
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise ElementTree.ParseError("DOCTYPE is not allowed")
+
+
+def is_absolute_uri(value: str) -> bool:
+    """Return whether `value` has a scheme, so it is not a path relative to Jamf."""
+    try:
+        return bool(urlsplit(value).scheme)
+    except ValueError:
+        return False
+
+
 def _parse(xml: bytes) -> tuple[str | None, list[AssertionConsumerService]]:
-    """Return the entity ID and the SP ACS endpoints of one metadata document."""
-    root = ElementTree.fromstring(xml)
+    """Return the entity ID and the SP ACS endpoints of one metadata document.
+
+    Raise `ElementTree.ParseError` for malformed XML or any DOCTYPE. The check
+    runs inside the parser, so it holds for every encoding of the body.
+    """
+    parser = ElementTree.XMLParser(target=_NoDoctypeBuilder())
+    parser.feed(xml)
+    root = parser.close()
     services = root.findall(
         "md:SPSSODescriptor/md:AssertionConsumerService", METADATA_NS
     )
@@ -153,7 +176,7 @@ def _fetch(
     for redirects in range(MAX_REDIRECTS + 1):
         if _origin(current) not in allowed_origins:
             return None, (
-                "metadata URL is not allowed"
+                f"metadata URL is not allowed; permit its HTTPS origin with {ALLOWLIST_SETTING}"
                 if redirects == 0
                 else "metadata redirect is not allowed"
             )
@@ -195,8 +218,6 @@ def _load(
     xml, error = _fetch(url, allowed_origins)
     if xml is None:
         return None, error
-    if b"<!DOCTYPE" in xml.upper() or b"<!ENTITY" in xml.upper():
-        return None, "invalid metadata XML"
     try:
         return _parse(xml), None
     except ElementTree.ParseError:
@@ -220,6 +241,8 @@ def enrich_sso_metadata(
     sp, error = _load(_resolve_url(base_url, settings.get("entityId")), jamf_origins)
     if sp:
         entity_id, endpoints = sp
+        if not entity_id:
+            metadata.errors.append("sp: no entityID")
         metadata.sp = ServiceProviderMetadata(
             entityId=entity_id, assertionConsumerServices=endpoints
         )
@@ -231,6 +254,8 @@ def enrich_sso_metadata(
         jamf_origins | allowed_idp_origins,
     )
     if idp:
+        if not idp[0]:
+            metadata.errors.append("idp: no entityID")
         metadata.idp = IdentityProviderMetadata(entityId=idp[0])
     if error:
         metadata.errors.append(f"idp: {error}")
