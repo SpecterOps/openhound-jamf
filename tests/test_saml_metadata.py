@@ -10,7 +10,7 @@ from openhound_jamf.saml_metadata import enrich_sso_metadata, parse_allowed_orig
 BASE = "https://jamf.test"
 IDP_ORIGIN = ("https", "idp.example", 443)
 SP_XML = b"""<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="sp">
-<md:SPSSODescriptor><md:AssertionConsumerService Location="https://jamf.test/acs" Binding="b" index="1" isDefault="true"/>
+<md:SPSSODescriptor><md:AssertionConsumerService Location="https://jamf.test/acs" Binding="b" index="0001" isDefault="true"/>
 </md:SPSSODescriptor></md:EntityDescriptor>"""
 IDP_XML = b'<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="idp"/>'
 # A byte search for "<!DOCTYPE" misses this body, but a parser expands the entity.

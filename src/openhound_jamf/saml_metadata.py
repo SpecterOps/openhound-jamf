@@ -122,14 +122,16 @@ def _resolve_url(base_url: str, value: str | None) -> str | None:
 def _index(value: str | None) -> int | None:
     """Return an ACS `index` (xs:unsignedShort), None when absent.
 
-    Raise `ElementTree.ParseError` for any other value. The length check comes
-    before `int`, which rejects very long digit strings.
+    Leading zeros are valid. Raise `ElementTree.ParseError` for any other value.
+    The length check covers the significant digits and comes before `int`, which
+    rejects very long digit strings.
     """
     if value is None:
         return None
-    if not (value.isascii() and value.isdigit() and len(value) <= 5):
+    digits = value.lstrip("0") or "0"
+    if not (value.isascii() and value.isdigit() and len(digits) <= 5):
         raise ElementTree.ParseError(f"invalid ACS index {value[:10]!r}")
-    index = int(value)
+    index = int(digits)
     if index > MAX_ACS_INDEX:
         raise ElementTree.ParseError(f"invalid ACS index {value!r}")
     return index
