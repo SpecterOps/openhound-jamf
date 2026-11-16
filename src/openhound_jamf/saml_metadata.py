@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MAX_METADATA_BYTES = 2 * 1024 * 1024
 MAX_REDIRECTS = 3
+MAX_ACS_INDEX = 65535
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 METADATA_NS = {"md": "urn:oasis:names:tc:SAML:2.0:metadata"}
 
@@ -119,7 +120,19 @@ def _resolve_url(base_url: str, value: str | None) -> str | None:
 
 
 def _index(value: str | None) -> int | None:
-    return int(value) if value and value.isdecimal() else None
+    """Return an ACS `index` (xs:unsignedShort), None when absent.
+
+    Raise `ElementTree.ParseError` for any other value. The length check comes
+    before `int`, which rejects very long digit strings.
+    """
+    if value is None:
+        return None
+    if not (value.isascii() and value.isdigit() and len(value) <= 5):
+        raise ElementTree.ParseError(f"invalid ACS index {value[:10]!r}")
+    index = int(value)
+    if index > MAX_ACS_INDEX:
+        raise ElementTree.ParseError(f"invalid ACS index {value!r}")
+    return index
 
 
 class _NoDoctypeBuilder(ElementTree.TreeBuilder):

@@ -18,6 +18,13 @@ UTF16_ENTITY_XML = (
     '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE a [<!ENTITY x "idp">]>'
     '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="&x;"/>'
 )
+# An ACS index outside xs:unsignedShort (here, over 4300 digits) is invalid metadata.
+OVERSIZED_INDEX_XML = (
+    b'<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="idp">'
+    b'<md:SPSSODescriptor><md:AssertionConsumerService Location="https://x/acs" Binding="b" index="'
+    + b"9" * 4400
+    + b'"/></md:SPSSODescriptor></md:EntityDescriptor>'
+)
 RECORD = {
     "configurationType": "SAML",
     "samlSettings": {
@@ -118,6 +125,11 @@ def test_metadata_gives_entity_ids_and_every_acs_endpoint(monkeypatch):
                     body=UTF16_ENTITY_XML.encode("utf-16")
                 )
             },
+            "idp: invalid metadata XML",
+        ),
+        (
+            frozenset({IDP_ORIGIN}),
+            {"https://idp.example/metadata": FakeResponse(body=OVERSIZED_INDEX_XML)},
             "idp: invalid metadata XML",
         ),
     ],
