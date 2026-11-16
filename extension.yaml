@@ -31,7 +31,10 @@ parameters:
     description: >-
       Comma-separated HTTPS origins that may serve the SAML identity provider
       metadata, for example https://example.okta.com. Without it, only the Jamf
-      origin is fetched, and an identity provider on another origin gets no SAML facts.
+      origin is fetched. For an identity provider on another origin, the issuer
+      is then unknown: the collector writes the Jamf SAML service provider, its
+      assertion consumer services, its rule, and its account edges, but no issuer
+      node and no SAML_TrustsIssuer edge, so the correlator cannot pair it.
     required: false
 
 tags: [ "jamf", "source", "opengraph" ]

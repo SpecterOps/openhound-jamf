@@ -71,23 +71,27 @@ ALL_ASSETS = (
 )
 
 
-@pytest.mark.parametrize(
-    "record",
-    [
-        # The library builds SP edges only for a trusted issuer (#95).
-        _record(idp=False),
-        # SP fetch failed and the settings hold a relative path, not an entity ID.
-        {**_record(), "samlMetadata": {**_record()["samlMetadata"], "sp": None}},
-    ],
-    ids=["no-issuer", "relative-entity-id-without-sp-metadata"],
-)
-def test_without_issuer_or_entity_id_no_saml_fact_is_written(record):
+def test_without_entity_id_no_saml_fact_is_written():
+    # SP fetch failed and the settings hold a relative path, not an entity ID.
+    record = {**_record(), "samlMetadata": {**_record()["samlMetadata"], "sp": None}}
     record = {**record, "samlAcs": ACS}
     accounts = [_account(1, "jsmith", "j@example.com", "Enabled")]
     for cls in ALL_ASSETS:
         asset = _asset(cls, record, accounts)
         assert asset.as_node is None
         assert list(asset.edges) == []
+
+
+def test_without_issuer_the_sp_facts_have_no_issuer_trust():
+    record = {**_record(idp=False), "samlAcs": ACS}
+    accounts = [_account(1, "jsmith", "j@example.com", "Enabled")]
+    assert _asset(SAMLIssuer, record, accounts).as_node is None
+    assert _asset(SAMLAssertionConsumerService, record, accounts).as_node is not None
+    sp = _asset(SAMLServiceProvider, record, accounts)
+    assert sp.as_node is not None
+    kinds = {e.kind for e in sp.edges}
+    assert "SAML_TrustsIssuer" not in kinds
+    assert {"SAML_HasAssertionConsumerService", "SAML_HasAccount"} <= kinds
 
 
 def test_service_provider_edges_follow_account_evidence():
@@ -137,8 +141,14 @@ def test_username_rule_exists_only_when_an_account_gives_the_field():
 
 
 @pytest.mark.usefixtures("mock_dlt_requests")
-@pytest.mark.parametrize("mapping", ["EMAIL", "USERNAME"])
-def test_converted_graph_is_conformant(tmp_path, monkeypatch, mock_jamf_api, mapping):
+@pytest.mark.parametrize(
+    ("mapping", "idp_allowed"),
+    [("EMAIL", True), ("USERNAME", True), ("EMAIL", False)],
+    ids=["email", "username", "idp-origin-not-allowed"],
+)
+def test_converted_graph_is_conformant(
+    tmp_path, monkeypatch, mock_jamf_api, mapping, idp_allowed
+):
     from openhound.core.collect import Collector
     from openhound.core.convert import Converter
     from openhound.core.preproc import PreProcessor
@@ -159,7 +169,9 @@ def test_converted_graph_is_conformant(tmp_path, monkeypatch, mock_jamf_api, map
     def make_source():
         return source(
             credentials=credentials,
-            saml_metadata_allowed_origins="https://example.idp.com",
+            saml_metadata_allowed_origins="https://example.idp.com"
+            if idp_allowed
+            else "",
         )
 
     collected = tmp_path / "collected" / "jamf"
@@ -199,6 +211,7 @@ def test_converted_graph_is_conformant(tmp_path, monkeypatch, mock_jamf_api, map
     assert all(n["kinds"][-1] == "jamf" for n in nodes if n not in saml)
     edge_kinds = {e["kind"] for e in edges}
     assert "SAML_Implements" in edge_kinds
+    assert ("SAML_TrustsIssuer" in edge_kinds) == idp_allowed
     has_field = "SAML_AccountResolutionField" in {n["kinds"][0] for n in saml}
     assert has_field == (mapping == "USERNAME")
     assert ("SAML_HasAccountResolutionValue" in edge_kinds) == (mapping == "USERNAME")
