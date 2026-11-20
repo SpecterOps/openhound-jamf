@@ -2,7 +2,7 @@
   "schema": {
     "name": "SOJamf",
     "display_name": "Jamf Extension (by SpecterOps)",
-    "version": "v1.1.3",
+    "version": "v1.1.4",
     "namespace": "jamf"
   },
   "node_kinds": [
@@ -84,7 +84,16 @@
       "description": "Represents the Single Sign-On (SSO) integration configured in the Jamf Pro tenant. When enabled, the SSO provider can map attributes to authenticate as any Jamf account or group, making it a Tier 0 node with significant security implications.",
       "is_display_kind": true,
       "icon": "address-card",
-      "color": "#FFFFFF"
+      "color": "#FFFFFF",
+      "info": {
+        "saml_federation": {
+          "title": "SAML Federation",
+          "position": 1,
+          "markdown": {
+            "content": "{{ $objectID := .Properties.objectid | default \"\" | trim }}\n{{ $escapedObjectID := $objectID | replace \"\\\\\" \"\\\\\\\\\" | replace \"'\" \"\\\\'\" }}\n{{ if ne $objectID \"\" }}\n{{ $query := printf \"MATCH p = (selected:jamf_SSOIntegration {objectid: '%s'})-[:SAML_Implements]->(service_provider:SAML_ServiceProvider)\\nRETURN p\\nLIMIT 500\" $escapedObjectID }}\n{{ $encodedQuery := $query | b64enc | urlquery }}\n[View the normalized SAML configuration of this object in Explore](/ui/explore?exploreSearchTab=cypher&searchType=cypher&cypherSearch={{ $encodedQuery }})\n{{ else }}\nExplore navigation is unavailable because this object has no stable identifier.\n{{ end }}"
+          }
+        }
+      }
     },
     {
       "name": "jamf_CloudIntegration",

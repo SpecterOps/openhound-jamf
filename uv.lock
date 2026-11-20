@@ -887,7 +887,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "openhound-saml-producer", specifier = "==0.4.6rc4" }]
+requires-dist = [{ name = "openhound-saml-producer", specifier = "==0.4.6rc5" }]
 
 [package.metadata.requires-dev]
 container = [{ name = "openhound", specifier = ">=0.4.2,<0.5" }]
@@ -904,14 +904,14 @@ dev = [
 
 [[package]]
 name = "openhound-saml-producer"
-version = "0.4.6rc4"
+version = "0.4.6rc5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "openhound" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/75/8d/3754d270ffa1ef6515a5c49c086c80fbac3e4f56dea8cae2aa328bc59d15/openhound_saml_producer-0.4.6rc4.tar.gz", hash = "sha256:7666d552d2cd28b57b136025cbeca99ccdfd46351bbcbc63e87f863f196f941f", size = 77605, upload-time = "2026-11-16T04:43:19.743Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/ca/9237dabf429092f1a9d4949d61401baf9075949db568eed54c48e41978dc/openhound_saml_producer-0.4.6rc5.tar.gz", hash = "sha256:7b6c0376b629190ab9a66c3d7b35b57256459965893fc4cc951145f94043886d", size = 111746, upload-time = "2026-11-20T17:10:18.867Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d4/7d/3c76ddeb8810b2d8165f646c67a601c3e8f0b3aa6d547e307be064e54130/openhound_saml_producer-0.4.6rc4-py3-none-any.whl", hash = "sha256:b4594411bb4cb68b8ac3a2caab9ce0191b909401c7ede6c52c8f960e24a49f8e", size = 70108, upload-time = "2026-11-16T04:43:18.707Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/40/02053b038395bd89438b99b9d456a85eb2579a7831b0b22e8fb6f81fb070/openhound_saml_producer-0.4.6rc5-py3-none-any.whl", hash = "sha256:6368f410f5d58de9492fcb3d13dcf8a29f47b21657e4a13838ccbaff958610b3", size = 100067, upload-time = "2026-11-20T17:10:17.823Z" },
 ]
 
 [[package]]
