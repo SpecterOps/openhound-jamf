@@ -1,3 +1,5 @@
+import dlt
+import typer
 from dlt.extract.source import DltSource
 from openhound.core.app import OpenHound
 from openhound.core.collect import CollectContext
@@ -10,13 +12,31 @@ from openhound_jamf.transforms import transforms
 app = OpenHound("jamf", source_kind="jamf", help="OpenGraph collector for JAMF Pro")
 
 
+def nodes_only_enabled() -> bool:
+    """Read the Jamf preview setting with support for a top-level TOML key."""
+    configured = dlt.config.get("sources.jamf.NodesOnly", bool)
+    if configured is None:
+        configured = dlt.config.get("NodesOnly", bool)
+    return configured is True
+
+
 @app.collect()
-def collect(ctx: CollectContext) -> DltSource:
+def collect(ctx: CollectContext) -> DltSource | None:
     """Register a Typer CLI command that collects JAMF resources and stores them (filtered) on disk.
 
     Args:
         ctx (CollectContext): Returns DLT pipeline context.
     """
+    if nodes_only_enabled():
+        from openhound_jamf.preview import print_projected_nodes
+
+        if ctx.pipeline.resources:
+            raise typer.BadParameter(
+                "NodesOnly counts the nodes in a Jamf collection. Omit the resource list."
+            )
+        print_projected_nodes()
+        return None
+
     from openhound_jamf.source import source as jamf_source
 
     return jamf_source()
@@ -51,6 +71,11 @@ def convert(ctx: ConvertContext) -> tuple[DltSource, dict]:
     Args:
         ctx (CollectContext): Returns DLT pipeline context.
     """
+    if nodes_only_enabled():
+        raise typer.BadParameter(
+            "NodesOnly prints the count during collect jamf. Set NodesOnly = false to convert a graph."
+        )
+
     from openhound_jamf.source import source as jamf_source
 
     return jamf_source(), {}

@@ -13,8 +13,6 @@ from dlt.sources.helpers.rest_client.paginators import (
 
 from .auth import JamfAuth, JamfClientCredentials, JamfPasswordCredentials
 from .main import app
-from .graph import JAMFNode
-from .kinds import nodes as nk
 from .models.cloudldap import (
     CloudGroupResponse,
     CloudGroupTest,
@@ -56,6 +54,7 @@ logger = logging.getLogger(__name__)
 class SourceContext:
     client: RESTClient
     tenant_id: str | None = None
+    nodes_only: bool = False
     _cloud_snapshot: CloudIntegrationSnapshot | None = field(default=None, init=False)
     _cloud_error: Exception | None = field(default=None, init=False)
     _cloud_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -294,7 +293,9 @@ def account_details(user, ctx: SourceContext):
     response = ctx.client.get(f"/JSSResource/accounts/userid/{user['id']}").json()
     account = response["account"]
     try:
-        account["cloud_idp_user_tests"] = ctx.account_cloud_tests(account)
+        account["cloud_idp_user_tests"] = (
+            [] if ctx.nodes_only else ctx.account_cloud_tests(account)
+        )
     except Exception as error:
         logger.warning(
             "Cloud directory enrichment failed for account %s: %s",
@@ -335,7 +336,9 @@ def account_group_details(group, ctx: SourceContext):
     response = ctx.client.get(f"/JSSResource/accounts/groupid/{group['id']}").json()
     details = response["group"]
     try:
-        details["cloud_idp_group_tests"] = ctx.group_cloud_tests(details)
+        details["cloud_idp_group_tests"] = (
+            [] if ctx.nodes_only else ctx.group_cloud_tests(details)
+        )
     except Exception as error:
         logger.warning(
             "Cloud directory enrichment failed for group %s: %s",
@@ -550,12 +553,13 @@ def cloud_integration_details(ctx: SourceContext):
             "A Jamf tenant hostname is required for cloud integration identity"
         )
     for provider in ctx.cloud_snapshot().results:
-        if provider.provider_name != "AZURE":
+        graph_id = provider.graph_node_id(ctx.tenant_id)
+        if graph_id is None:
             ctx.log_unsupported_provider(provider)
             continue
         identity = dict(
             summary=provider,
-            graph_id=JAMFNode.guid(provider.id, nk.CLOUD_INTEGRATION, ctx.tenant_id),
+            graph_id=graph_id,
             tenant=ctx.tenant_id,
         )
         try:
@@ -591,11 +595,13 @@ def source(
     credentials: Union[
         JamfPasswordCredentials, JamfClientCredentials
     ] = dlt.secrets.value,
+    nodes_only: bool = False,
 ):
     """DLT source, defines JAMF collection resources and transformers.
 
     Args:
         credentials (JamfPasswordCredentials | JamfClientCredentials): The JAMF credentials configuration
+        nodes_only: Skip enrichment used exclusively by graph edges.
 
     Returns:
         (tuple[users, user_details, sites, scripts, script_details, policy_details, policies, computers, computerextensionattributes, api_roles, api_integrations, accounts, account_details, account_groups, account_group_details]): A tuple of DLT resources/transformers registered for the JAMF source.
@@ -604,6 +610,7 @@ def source(
 
     ctx = SourceContext(
         tenant_id=urlsplit(credentials.host).hostname,
+        nodes_only=nodes_only,
         client=RESTClient(
             base_url=credentials.host,
             headers={"accept": "application/json"},

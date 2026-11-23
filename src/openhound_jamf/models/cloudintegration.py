@@ -44,6 +44,12 @@ class CloudIntegration(BaseModel):
     provider_name: str = Field(alias="providerName")
     provider_description: str = Field(alias="providerDescription")
 
+    def graph_node_id(self, tenant: str) -> str | None:
+        """Return the graph ID for an Azure provider using its summary identity."""
+        if self.provider_name == "AZURE":
+            return JAMFNode.guid(self.id, nk.CLOUD_INTEGRATION, tenant)
+        return None
+
 
 class CloudIntegrationResponse(BaseModel):
     """One page returned by GET /api/v1/cloud-idp."""
@@ -281,9 +287,9 @@ class CloudIntegrationAsset(JAMFAsset):
         details exist, require matching provider IDs and non-colliding property
         paths. Raise ValueError for inconsistent identities or invalid properties.
         """
-        if self.summary.provider_name != "AZURE":
+        expected = self.summary.graph_node_id(self.tenant)
+        if expected is None:
             raise ValueError("Only Azure cloud integration nodes are supported")
-        expected = JAMFNode.guid(self.summary.id, nk.CLOUD_INTEGRATION, self.tenant)
         if self.graph_id != expected:
             raise ValueError(
                 "Cloud integration graph ID does not match its source identity"
